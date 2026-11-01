@@ -81,7 +81,7 @@ Docker image builds.
 | --- | --- | --- | --- |
 | Trusted merchant (200 orders / 190 ok / 0 fraud, $120.00) | 7.80% | COVERAGE_AVAILABLE | $0.47 |
 | AI-Generated Scam listing (new merchant 2/2, $80.00) | 70.25% | COVERAGE_AVAILABLE | $2.81 |
-| Repeat offender (40 orders / 30 ok / 2 fraud, $60.00) | 81.00% (×2.00)` | BLOCKED_HIGH_RISK | none — checkout proceeds without coverage |
+| Repeat offender (40 orders / 30 ok / 2 fraud, $60.00) | 81.00% (marketplace offender penalty applied) | BLOCKED_HIGH_RISK | none — checkout proceeds without coverage |
 
 In the storefront, the **Risk Simulator** drawer swaps between the three in one
 click. On the Claims Portal, upload a photo of the received item for a captured

@@ -125,4 +125,9 @@ jobs:
         run: docker build -f backend/Dockerfile backend
       - name: Build frontend image
         if: ${{ hashFiles('frontend/Dockerfile') != '' }}
-        run: docker build -f frontend/Dockerfile frontend
+        run: |
+          if [ ! -s frontend/package.json ]; then
+            echo "frontend app not landed yet (P3 owns package.json); skipping image build"
+            exit 0
+          fi
+          docker build -f frontend/Dockerfile frontend
