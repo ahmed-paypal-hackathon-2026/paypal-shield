@@ -1,0 +1,110 @@
+name: ci
+
+on:
+  push:
+    branches: [main, frontend, devops]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend lint + typecheck + test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Lint and typecheck
+        working-directory: frontend
+        run: npm run lint
+      - name: Tests
+        working-directory: frontend
+        run: npm test
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  backend:
+    name: backend lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest pytest-asyncio httpx
+          if [ -f backend/requirements.txt ]; then
+            pip install -r backend/requirements.txt
+          fi
+      - name: Ruff
+        run: ruff check backend
+      - name: Pytest
+        run: |
+          cd backend
+          if compgen -G "tests/**/*.py" > /dev/null; then
+            python -m pytest -q
+          else
+            echo "no backend tests yet (P1/P2 own them); skipping gracefully"
+          fi
+
+  contract:
+    name: contract enforcement (REQ-OPS-02)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate frozen OpenAPI JSON
+        run: python .github/scripts/validate_openapi.py
+      - name: OpenAPI drift diff
+        run: |
+          if grep -qE "FastAPI\(|app\s*=\s*FastAPI" backend/app/main.py 2>/dev/null; then
+            pip install -r backend/requirements.txt pytest
+            pip install fastapi
+            python .github/scripts/export_and_diff_openapi.py
+          else
+            echo "FastAPI app not landed yet (P1); drift diff skipped"
+          fi
+      - name: Terminology lint (REQ-NF-05)
+        run: python .github/scripts/terminology_lint.py
+      - name: TypeScript contract sync
+        run: node .github/scripts/check_ts_contract.mjs
+
+  security:
+    name: security gates (REQ-OPS-04)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compose config validation
+        run: docker compose -f docker-compose.yml config -q
+
+  smoke:
+    name: compose smoke build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile backend
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile frontend
