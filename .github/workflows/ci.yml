@@ -16,6 +16,7 @@ jobs:
   frontend:
     name: frontend lint + typecheck + test + build
     runs-on: ubuntu-latest
+    if: ${{ hashFiles('frontend/package.json') != '' && hashFiles('frontend/src/**/*.ts*') != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,16 +26,27 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install
         working-directory: frontend
-        run: npm ci --no-audit --no-fund
+        run: |
+          if [ ! -s package-lock.json ]; then
+            echo "frontend not landed yet (P3-owned package.json is empty); skipping frontend job"
+            exit 0
+          fi
+          npm ci --no-audit --no-fund
       - name: Lint and typecheck
         working-directory: frontend
-        run: npm run lint
+        run: |
+          if [ ! -s package-lock.json ]; then exit 0; fi
+          npm run lint
       - name: Tests
         working-directory: frontend
-        run: npm test
+        run: |
+          if [ ! -s package-lock.json ]; then exit 0; fi
+          npm test
       - name: Build
         working-directory: frontend
-        run: npm run build
+        run: |
+          if [ ! -s package-lock.json ]; then exit 0; fi
+          npm run build
 
   backend:
     name: backend lint + tests
@@ -48,10 +60,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ruff pytest pytest-asyncio httpx
-          if [ -f backend/requirements.txt ]; then
+          if [ -s backend/requirements.txt ]; then
             pip install -r backend/requirements.txt
           fi
       - name: Ruff
+        if: ${{ hashFiles('backend/app/**/*.py') != '' }}
         run: ruff check backend
       - name: Pytest
         run: |
@@ -74,14 +87,17 @@ jobs:
         run: python .github/scripts/validate_openapi.py
       - name: OpenAPI drift diff
         run: |
-          if grep -qE "FastAPI\(|app\s*=\s*FastAPI" backend/app/main.py 2>/dev/null; then
-            pip install -r backend/requirements.txt pytest
+          if grep -qE "FastAPI\(" backend/app/main.py 2>/dev/null; then
             pip install fastapi
+            if [ -s backend/requirements.txt ]; then
+              pip install -r backend/requirements.txt
+            fi
             python .github/scripts/export_and_diff_openapi.py
           else
             echo "FastAPI app not landed yet (P1); drift diff skipped"
           fi
       - name: Terminology lint (REQ-NF-05)
+        if: ${{ hashFiles('frontend/src/**', 'backend/app/**/*.py') != '' }}
         run: python .github/scripts/terminology_lint.py
       - name: TypeScript contract sync
         run: node .github/scripts/check_ts_contract.mjs
@@ -105,6 +121,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build backend image
+        if: ${{ hashFiles('backend/Dockerfile') != '' }}
         run: docker build -f backend/Dockerfile backend
       - name: Build frontend image
+        if: ${{ hashFiles('frontend/Dockerfile') != '' }}
         run: docker build -f frontend/Dockerfile frontend

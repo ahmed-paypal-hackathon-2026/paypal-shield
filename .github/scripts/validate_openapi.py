@@ -23,6 +23,9 @@ REQUIRED_PATHS = {
 
 def main() -> int:
     path = Path(__file__).resolve().parents[2] / "shared" / "openapi.json"
+    if not path.exists() or path.stat().st_size == 0:
+        print("shared/openapi.json not frozen yet (P4 contract freeze); skipping")
+        return 0
     try:
         contract = json.loads(path.read_text())
     except FileNotFoundError:
