@@ -14,10 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
+# Drop to non-root before declaring the entrypoint (USER must precede CMD/EXPOSE).
 # Sandbox guard: refuses to boot against a non-Sandbox PayPal base URL unless
 # ALLOW_NON_SANDBOX=true is explicitly set by the operator.
-CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+USER 1000
 
 EXPOSE 8000
 
-USER 1000
+CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]

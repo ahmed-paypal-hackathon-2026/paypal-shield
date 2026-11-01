@@ -51,7 +51,7 @@ for (const [tsName, schemaName] of Object.entries(mapping)) {
     continue;
   }
   for (const field of required) {
-    const pattern = new RegExp(`\\b${field}\\??\s*:`);
+    const pattern = new RegExp(`\\b${field}\\??\\s*:`);
     if (!pattern.test(block)) {
       errors.push(`contracts.ts ${tsName} is missing required field ${field}`);
     }

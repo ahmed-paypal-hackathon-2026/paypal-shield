@@ -33,7 +33,7 @@ def main() -> int:
                 violations.append(f"{file.relative_to(repo)}:{line}")
 
     if violations:
-        print("TERMINLOGY VIOLATIONS — the fee is a 'Buyer Protection Fee', never described as underwritten coverage:")
+        print("TERMINOLOGY VIOLATIONS — the fee is a 'Buyer Protection Fee', never described as underwritten coverage:")
         for v in violations:
             print(f"  {v}")
         return 1

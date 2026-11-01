@@ -24,6 +24,14 @@ FROM nginx:1.27-alpine AS runtime
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Grant the unprivileged nginx user ownership of its runtime paths,
+# then drop privileges. Port 5173 > 1024 so no CAP_NET_BIND_SERVICE needed.
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid /var/cache/nginx
+
+USER nginx
+
 EXPOSE 5173
 
 HEALTHCHECK --interval=15s --timeout=3s \
