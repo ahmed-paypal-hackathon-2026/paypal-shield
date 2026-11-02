@@ -54,11 +54,15 @@ R_BLOCKED_THRESHOLD = Decimal("80.00")
 FEE_RATE_FLOOR_FACTOR = Decimal("0.04")   # 4% cap on item price
 FEE_RATE_RISK_FACTOR = Decimal("0.05")    # 5% of risk-adjusted price
 
+ZERO_DECIMAL = frozenset({"JPY", "HUF", "TWD"})
+
 _MIN_FEES: dict[str, Decimal] = {
     "USD": Decimal("0.25"),
     "EUR": Decimal("0.25"),
     "GBP": Decimal("0.25"),
     "JPY": Decimal("35"),
+    "HUF": Decimal("90"),
+    "TWD": Decimal("8"),
 }
 _DEFAULT_MIN_FEE = Decimal("0.25")
 
@@ -152,7 +156,7 @@ def _compute_fee_amount(
     raw_fee = max(min_fee, min(price_cap, risk_fee))
 
     currency_upper = currency.upper()
-    if currency_upper == "JPY":
+    if currency_upper in ZERO_DECIMAL:
         return raw_fee.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return _q2(raw_fee)
 
@@ -283,4 +287,4 @@ def compute_fee(
     from app.schemas.contracts import GateDecision  # lazy import
     if assessment.gate == GateDecision.BLOCKED_HIGH_RISK:
         return Decimal("0.00")
-    return _compute_fee_amount(assessment.r_final, item_price, currency)
+    return _compute_fee_amount(item_price, assessment.r_final, currency)

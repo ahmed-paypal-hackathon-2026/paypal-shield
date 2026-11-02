@@ -13,6 +13,7 @@ Person 1's service layer.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -102,7 +103,10 @@ class ShieldRiskEngine:
         In DEMO_DETERMINISTIC_MODE, skips all model inference and returns
         the seeded demo scores (CacheStatus.DEMO).
         """
-        key = image_hash(image_bytes)
+        img_h = image_hash(image_bytes)
+        text_norm = f"{title.strip().lower()} {description.strip().lower()}"
+        text_h = hashlib.sha256(text_norm.encode("utf-8")).hexdigest()
+        key = f"{img_h}_{text_h}"
 
         # --- demo fast-path --------------------------------------------
         if is_demo_mode():
@@ -125,7 +129,7 @@ class ShieldRiskEngine:
         price_mod = _get_price()
 
         # Visual and semantic are async; reviews and price are sync
-        (s_vis, is_ai, vis_ver), (s_sem, sem_ver) = await asyncio.gather(
+        (s_vis, is_ai, vis_reason), (s_sem, sem_reason) = await asyncio.gather(
             vis_mod.score_visual(image_bytes),
             sem_mod.score_semantic(image_bytes, title, description),
         )
@@ -136,6 +140,8 @@ class ShieldRiskEngine:
         reason_codes: list[str] = []
         if is_ai:
             reason_codes.append("VIS_AI_GENERATED")
+        elif vis_reason == "VIS_FALLBACK_DEFAULT":
+            reason_codes.append("VIS_FALLBACK_DEFAULT")
         reason_codes.extend(rev_codes)
         reason_codes.extend(price_codes)
         # SEM_LOW_ALIGNMENT added by semantic module but consolidate here
@@ -149,7 +155,7 @@ class ShieldRiskEngine:
             s_price=s_price,
             is_ai_generated=is_ai,
             reason_codes=list(dict.fromkeys(reason_codes)),  # deduplicate, preserve order
-            model_versions={"visual": vis_ver, "semantic": sem_ver},
+            model_versions={"visual": "heuristic-v1", "semantic": "clip-ViT-B-32"},
             cache_status=CacheStatus.COMPUTED,
         )
 

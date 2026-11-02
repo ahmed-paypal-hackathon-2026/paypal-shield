@@ -41,12 +41,13 @@ _DEMO_MERCHANT_IDS: frozenset[str] = frozenset(
 def is_demo_mode(merchant_id: Optional[str] = None) -> bool:
     """Return True if demo mode is active.
 
-    When called with no args: returns True if SHIELD_DEMO_MODE env var is set.
+    When called with no args: returns True if DEMO_DETERMINISTIC_MODE or SHIELD_DEMO_MODE env var is set.
     When called with a merchant_id: returns True if that merchant is a demo scenario.
     """
     if merchant_id is not None:
         return merchant_id in _DEMO_MERCHANT_IDS
-    return os.environ.get("SHIELD_DEMO_MODE", "").strip() not in ("", "0", "false", "False")
+    val = os.environ.get("DEMO_DETERMINISTIC_MODE") or os.environ.get("SHIELD_DEMO_MODE", "")
+    return val.strip().lower() in ("1", "true", "yes")
 
 
 # ---------------------------------------------------------------------------

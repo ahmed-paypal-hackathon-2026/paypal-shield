@@ -120,37 +120,20 @@ def _apply_gates(
     """
     from app.schemas.contracts import ClaimState  # lazy import
 
-    # Gate 1: Discrepancy
-    if d_claim < _D_REJECT_THRESHOLD:
-        return (ClaimState.REJECTED, {
-            "gate_discrepancy_ok": False,
-            "gate_amount_ok": False,
-            "gate_velocity_ok": False,
-            "gate_no_dispute": False,
-        })
-
     gate_discrepancy_ok = d_claim >= _D_AUTO_THRESHOLD
-
-    # Gate 2: Claim amount
     gate_amount_ok = ctx.claim_amount <= _AMOUNT_LIMIT
-
-    # Gate 3: Buyer velocity
     gate_velocity_ok = (
         ctx.buyer_past_claims < _VELOCITY_CLAIMS_LIMIT
         and ctx.buyer_claim_ratio < _VELOCITY_RATIO_LIMIT
     )
-
-    # Gate 4: No active dispute
     gate_no_dispute = not ctx.dispute_active
 
-    all_pass = (
-        gate_discrepancy_ok
-        and gate_amount_ok
-        and gate_velocity_ok
-        and gate_no_dispute
-    )
-
-    outcome = ClaimState.AUTO_APPROVED if all_pass else ClaimState.MANUAL_REVIEW
+    if d_claim < _D_REJECT_THRESHOLD:
+        outcome = ClaimState.REJECTED
+    elif gate_discrepancy_ok and gate_amount_ok and gate_velocity_ok and gate_no_dispute:
+        outcome = ClaimState.AUTO_APPROVED
+    else:
+        outcome = ClaimState.MANUAL_REVIEW
 
     return (outcome, {
         "gate_discrepancy_ok": gate_discrepancy_ok,

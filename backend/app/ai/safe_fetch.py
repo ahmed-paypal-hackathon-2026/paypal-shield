@@ -145,7 +145,7 @@ def content_type_allowed(content_type: str) -> bool:
     return mime in _ALLOWED_CONTENT_TYPES
 
 
-async def safe_fetch_image(url: str, max_bytes: int = 10 * 1024 * 1024) -> bytes:
+async def safe_fetch_image(url: str, max_bytes: int = 5 * 1024 * 1024) -> bytes:
     """Fetch an image from *url* with SSRF and content-type guards.
 
     Raises:
