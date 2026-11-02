@@ -1,0 +1,27 @@
+{
+  "clean": [
+    "Excellent sound quality, arrived quickly, works with my laptop.",
+    "Battery lasts a whole week and the build feels premium.",
+    "Exactly as described in the listing, packaging was solid.",
+    "Great value for the money, would order from this store again.",
+    "Delivery took two days and support answered my question fast.",
+    "Comfortable fit for long sessions, would recommend."
+  ],
+  "bots": [
+    "Best product best product best product buy now buy now.",
+    "Amazing amazing amazing top quality top quality ship fast.",
+    "AAAAA+ seller AAAAA+ seller AAAAA+ seller recommend recommend recommend.",
+    "This is the greatest product ever made great product great product.",
+    "Perfect perfect perfect perfect perfect perfect perfect perfect perfect perfect.",
+    "Good good good good good good good good good good good good.",
+    "Nice item nice item nice item nice item nice item nice item nice item nice item."
+  ],
+  "counterfeit_keywords": {
+    "(comment)": "Fixed lexicon for Pillar 3 review mining (spec 6.1). Each hit maps to a reason code.",
+    "knockoff": ["knockoff", "knock-off", "knock off"],
+    "cheap plastic": ["cheap plastic", "feels cheap", "cheaply made"],
+    "not as pictured": ["not as pictured", "different than the photos", "not like the picture"],
+    "fake": ["is fake", "are fake", "totally fake"],
+    "replica": ["replica", "replica version"]
+  }
+}

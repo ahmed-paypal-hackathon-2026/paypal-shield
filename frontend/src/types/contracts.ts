@@ -15,10 +15,26 @@ export type ClaimState =
   | "SUBMITTED" | "EVIDENCE_CHECKED" | "AUTO_APPROVED"
   | "MANUAL_REVIEW" | "REJECTED" | "REFUNDED";
 
+/** Canonical vocabulary for pillar reason codes (spec section 6.1).
+ *  P2 emits only these values. Map to human labels in RiskBadge/reasons.ts.
+ */
+export type ReasonCode =
+  | "VIS_AI_GENERATED"
+  | "VIS_FALLBACK_DEFAULT"
+  | "SEM_LOW_ALIGNMENT"
+  | "REV_KEYWORD_KNOCKOFF"
+  | "REV_BOT_PATTERN"
+  | "REV_INSUFFICIENT"
+  | "PRICE_EXTREME_UNDER"
+  | "REP_FLAGGED_HISTORY"
+  | "REP_VERIFIED_HISTORY";
+
 export interface PillarScores {
   s_visual: string; s_semantic: string; s_reviews: string; s_price: string;
   is_ai_generated: boolean; reason_codes: string[];
   cache_status: "HIT" | "COMPUTED" | "MISS_DEFAULT" | "DEMO";
+  /** AI model versions used per pillar, keyed by pillar name. */
+  model_versions?: Record<string, string>;
 }
 
 export interface RiskAssessment {
@@ -54,4 +70,18 @@ export interface TransactionRow {
 export interface MerchantTrustRow {
   merchant_id: string; total_orders: number; successful_orders: number;
   verified_fraud_claims: number; trust_score: string; m_penalty: string;
+}
+
+/** Runtime context supplied to the arbiter pipeline (spec section 6.5).
+ *  Mirrors ArbiterContext in backend/app/schemas/contracts.py.
+ *  All Money fields are decimal strings — no float arithmetic.
+ */
+export interface ArbiterContext {
+  claim_amount: Money;
+  currency_code: string;
+  buyer_past_claims: number;
+  buyer_claim_ratio: string;
+  dispute_active: boolean;
+  listing_category?: string;
+  listing_price?: Money;
 }

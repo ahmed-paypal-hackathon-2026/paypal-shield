@@ -1,0 +1,69 @@
+{
+  "comment": "Canonical webhook payloads for replay tests. Headers arrive as PAYPAL-TRANSMISSION-ID, PAYPAL-TRANSMISSION-TIME, PAYPAL-TRANSMISSION-SIG, PAYPAL-CERT-URL, PAYPAL-AUTH-ALGO. Handler POSTs the five headers + webhook_id + parsed event to /v1/notifications/verify-webhook-signature and deduplicates by event_id.",
+  "events": [
+    {
+      "event_id": "wh-0001",
+      "event_type": "PAYMENT.CAPTURE.COMPLETED",
+      "expected": { "deduplication": "unique event_id", "side_effect": "reconcile capture if the client never returned" },
+      "payload": {
+        "id": "wh-0001",
+        "event_version": "1.0",
+        "event_type": "PAYMENT.CAPTURE.COMPLETED",
+        "resource_type": "capture",
+        "resource": {
+          "id": "8YF123456",
+          "status": "COMPLETED",
+          "custom_id": "quote_8d2f",
+          "amount": { "currency_code": "USD", "value": "120.47" },
+          "supplementary_data": { "related_ids": { "order_id": "6XK987654" } }
+        }
+      }
+    },
+    {
+      "event_id": "wh-0002",
+      "event_type": "PAYMENT.CAPTURE.REFUNDED",
+      "expected": { "deduplication": "unique event_id", "side_effect": "correlate refund to claim via custom_id and stored refund id" },
+      "payload": {
+        "id": "wh-0002",
+        "event_type": "PAYMENT.CAPTURE.REFUNDED",
+        "resource_type": "refund",
+        "resource": {
+          "id": "8RG777777",
+          "status": "COMPLETED",
+          "custom_id": "clm_0001",
+          "note_to_payer": "PayPal Shield counterfeit claim approved",
+          "amount": { "currency_code": "USD", "value": "120.00" }
+        }
+      }
+    },
+    {
+      "event_id": "wh-0003",
+      "event_type": "CUSTOMER.DISPUTE.CREATED",
+      "expected": { "deduplication": "unique event_id", "side_effect": "set dispute_active=FALSE gate block: arbitrer cannot auto-approve" },
+      "payload": {
+        "id": "wh-0003",
+        "event_type": "CUSTOMER.DISPUTE.CREATED",
+        "resource_type": "dispute",
+        "resource": {
+          "dispute_id": "AP-1234567890",
+          "status": "OPEN",
+          "dispute_state": "UNDER_REVIEW",
+          "reason": "MERCHANDISE_OR_SERVICE_NOT_AS_DESCRIBED",
+          "disputed_transactions": [
+            { "seller_transaction_id": "8YF123456", "transaction_status": "COMPLETED" }
+          ]
+        }
+      }
+    },
+    {
+      "event_id": "wh-0004",
+      "event_type": "CHECKOUT.ORDER.APPROVED",
+      "expected": { "deduplication": "unique event_id", "side_effect": "none: stored and acknowledged with 200, no processing" },
+      "payload": {
+        "id": "wh-0004",
+        "event_type": "CHECKOUT.ORDER.APPROVED",
+        "resource_type": "order"
+      }
+    }
+  ]
+}

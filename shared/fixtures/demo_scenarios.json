@@ -1,0 +1,83 @@
+{
+  "comment": "Deterministic demo scenarios (DEMO_DETERMINISTIC_MODE). Values reproduce the verified worked examples in the engineering spec section 6.3.",
+  "scenarios": [
+    {
+      "key": "trusted",
+      "label": "Trusted merchant",
+      "merchant": {
+        "merchant_id": "mer_audio_den",
+        "total_orders": 200,
+        "successful_orders": 190,
+        "verified_fraud_claims": 0
+      },
+      "item": {
+        "item_title": "AudioMax Studio Headphones",
+        "item_price": "120.00",
+        "currency_code": "USD",
+        "category": "electronics",
+        "pillars": { "s_visual": "0.0500", "s_semantic": "0.1000", "s_reviews": "0.1000", "s_price": "0.1000" }
+      },
+      "expected": {
+        "trust_score": "0.9381",
+        "s_merchant": "0.0619",
+        "r_base": "0.0780",
+        "m_penalty": "1.00",
+        "r_final": "7.80",
+        "gate": "COVERAGE_AVAILABLE",
+        "protection_fee": "0.47"
+      }
+    },
+    {
+      "key": "scam",
+      "label": "AI-Generated Scam",
+      "merchant": {
+        "merchant_id": "mer_dash_deals",
+        "total_orders": 2,
+        "successful_orders": 2,
+        "verified_fraud_claims": 0
+      },
+      "item": {
+        "item_title": "AuraGlow 8K Camera Bundle",
+        "item_price": "80.00",
+        "currency_code": "USD",
+        "category": "electronics",
+        "pillars": { "s_visual": "0.9200", "s_semantic": "0.8500", "s_reviews": "0.7000", "s_price": "0.9000" }
+      },
+      "expected": {
+        "trust_score": "0.7500",
+        "s_merchant": "0.2500",
+        "r_base": "0.7025",
+        "m_penalty": "1.00",
+        "r_final": "70.25",
+        "gate": "COVERAGE_AVAILABLE",
+        "protection_fee": "2.81"
+      }
+    },
+    {
+      "key": "offender",
+      "label": "Repeat Offender",
+      "merchant": {
+        "merchant_id": "mer_refurb_find",
+        "total_orders": 40,
+        "successful_orders": 30,
+        "verified_fraud_claims": 2
+      },
+      "item": {
+        "item_title": "RefurbOne GPU, like new",
+        "item_price": "60.00",
+        "currency_code": "USD",
+        "category": "electronics",
+        "pillars": { "s_visual": "0.5000", "s_semantic": "0.4000", "s_reviews": "0.6000", "s_price": "0.3000" }
+      },
+      "expected": {
+        "trust_score": "0.7400",
+        "s_merchant": "0.2600",
+        "r_base": "0.4050",
+        "m_penalty": "2.00",
+        "r_final": "81.00",
+        "gate": "BLOCKED_HIGH_RISK",
+        "protection_fee": null
+      }
+    }
+  ]
+}
