@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f1e4ff"/>
+      <stop offset="1" stop-color="#ffe1ec"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="220" fill="url(#grad)"/>
+  <rect x="60" y="35" width="200" height="150" rx="16" fill="#ffffff" stroke="#e879a9" stroke-width="3"/>
+  <path d="M35 140 Q160 20 285 140" fill="none" stroke="#e879a9" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <path d="M35 160 Q160 45 285 160" fill="none" stroke="#c084fc" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+  <rect x="120" y="80" width="80" height="58" rx="10" fill="#fad7e8"/>
+  <rect x="140" y="94" width="40" height="6" rx="3" fill="#9d6b91"/>
+  <circle cx="132" cy="120" r="10" fill="#b783aa"/>
+  <circle cx="188" cy="120" r="10" fill="#b783aa"/>
+  <g stroke="#9333ea" stroke-width="2.5" fill="none" stroke-linecap="round">
+    <path d="M240 50 l14 -8 -4 14 -8 2 z" opacity="0.8"/>
+    <path d="M70 40 l10 9 -12 3 z" opacity="0.8"/>
+  </g>
+  <text x="160" y="196" font-family="sans-serif" font-size="13" fill="#8b5e83" text-anchor="middle">Headphones, "photoreal" render</text>
+</svg>
