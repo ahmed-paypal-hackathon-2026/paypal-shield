@@ -1,0 +1,67 @@
+# Render blueprint for PayPal Shield - Person 4.
+# Deploys: managed Postgres, FastAPI API (Docker), React storefront (static).
+# Prereqs: PAYPAL_CLIENT_ID / SECRET / WEBHOOK_ID set as account-level envs.
+databases:
+  - name: shield-postgres
+    databaseName: shield
+    plan: free
+
+services:
+  - type: web
+    name: shield-api
+    plan: starter
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shield-postgres
+          property: connectionString
+      - key: PAYPAL_API_BASE
+        value: https://api-m.sandbox.paypal.com
+      - key: ALLOW_NON_SANDBOX
+        value: false
+      - key: DEMO_DETERMINISTIC_MODE
+        value: true
+      - key: ALLOWED_ORIGINS
+        value: https://shield-storefront.onrender.com
+      - key: QUOTES_HMAC_KEY
+        generateValue: true
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+
+  - type: web
+    name: shield-storefront
+    plan: starter
+    runtime: static
+    buildCommand: npm ci --no-audit --no-fund && npm run build
+    staticPublishPath: frontend/dist
+    pullRequestPreviewsEnabled: false
+    rootDir: frontend
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: VITE_API_BASE_URL
+        value: https://shield-api.onrender.com
+      - key: VITE_PAYPAL_CLIENT_ID
+        sync: false
+      - key: VITE_ALLOW_MOCK
+        value: true
