@@ -148,7 +148,13 @@ async def create_quote(
     # Deterministic persistence of r_final for the signed quote (money cannot change later).
     r_final = assessment.r_final if isinstance(assessment.r_final, Decimal) else Decimal(str(assessment.r_final))
 
-    quote = build_quote(assessment, body, settings)
+    quote = build_quote(
+        assessment,
+        body,
+        settings,
+        risk_engine=risk_engine,
+        fallback=fallback,
+    )
     if quote is not None:
         try:
             persist_quote(session, quote, r_final)

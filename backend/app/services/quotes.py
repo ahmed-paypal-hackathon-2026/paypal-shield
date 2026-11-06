@@ -122,6 +122,9 @@ def build_quote(
     req: QuoteRequest,
     settings: Settings,
     ttl_seconds: int | None = None,
+    *,
+    risk_engine=None,
+    fallback=None,
 ) -> ProtectionQuote | None:
     """Create and sign a quote, or return None when coverage is unavailable."""
     if assessment.gate != GateDecision.COVERAGE_AVAILABLE:
@@ -129,11 +132,13 @@ def build_quote(
 
     from app.services.engine_provider import get_risk_engine, fallback_engine
 
+    engine = risk_engine if risk_engine is not None else get_risk_engine()
+    safe_engine = fallback if fallback is not None else fallback_engine()
     try:
-        fee = get_risk_engine().price_fee(assessment, req.item_price, req.currency_code)
+        fee = engine.price_fee(assessment, req.item_price, req.currency_code)
     except Exception:  # noqa: BLE001 - REQ-NF-03: never fail at checkout
         logger.exception("engine price_fee failed; using deterministic fallback")
-        fee = fallback_engine().price_fee(assessment, req.item_price, req.currency_code)
+        fee = safe_engine.price_fee(assessment, req.item_price, req.currency_code)
 
     if fee <= 0:
         return None

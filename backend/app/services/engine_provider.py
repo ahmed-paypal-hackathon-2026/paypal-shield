@@ -31,7 +31,8 @@ def _load_app_ai_engine():
     # Only entry point into app/ai per Person 2's boundary note.
     from app.ai import engine as app_ai_engine
 
-    return app_ai_engine.engine
+    # ``app.ai`` exports the module-level ShieldRiskEngine singleton directly.
+    return app_ai_engine
 
 
 class EngineProvider:

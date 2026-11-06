@@ -387,7 +387,11 @@ async def _buyer_velocity(
 
 
 async def _arbitrate(
-    session: AsyncSession, settings: Settings, claim: ClaimRow, order: OrderRow
+    session: AsyncSession,
+    settings: Settings,
+    claim: ClaimRow,
+    order: OrderRow,
+    risk_engine=None,
 ) -> ArbiterDecision:
     """Engine arbitration with stub fallback (REQ-NF-03 never 500s a claim)."""
     past_claims, ratio = await _buyer_velocity(session, settings, claim, order)
@@ -409,7 +413,7 @@ async def _arbitrate(
     listing = _listing_placeholder_bytes(order.quote_id)
     received = _received_placeholder_bytes(claim)
     try:
-        engine = get_risk_engine()
+        engine = risk_engine if risk_engine is not None else get_risk_engine()
         decision = await engine.arbitrate(claim_record, listing, received, ctx)
     except Exception as exc:  # noqa: BLE001
         logger.error(
@@ -460,6 +464,7 @@ async def run_claim_pipeline(
     transport,
     *,
     claim_id: str,
+    risk_engine=None,
 ) -> None:
     """Evidence -> arbitrate -> auto-refund. Safe to run repeatedly."""
     try:
@@ -502,7 +507,13 @@ async def run_claim_pipeline(
             )
 
             # ---- arbitrate -------------------------------------------------
-            decision = await _arbitrate(session, settings, claim, order)
+            decision = await _arbitrate(
+                session,
+                settings,
+                claim,
+                order,
+                risk_engine=risk_engine,
+            )
             claim.discrepancy = decision.discrepancy_score
             assert_claim_transition(claim.state, decision.outcome.value)
             claim.state = decision.outcome.value
