@@ -1,0 +1,549 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PayPal Shield",
+    "description": "Real-time risk evaluation and Buyer Protection Fee layer for PayPal Checkout. Fees are platform service fees under a Protection Plan - never insurance.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quotes": {
+      "post": {
+        "tags": [
+          "quotes"
+        ],
+        "summary": "Create Quote",
+        "operationId": "create_quote_api_v1_quotes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders": {
+      "post": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "Create Order",
+        "operationId": "create_order_api_v1_orders_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateOrderResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{paypal_order_id}/capture": {
+      "post": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "Capture Order",
+        "operationId": "capture_order_api_v1_orders__paypal_order_id__capture_post",
+        "parameters": [
+          {
+            "name": "paypal_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Paypal Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptureResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CacheStatus": {
+        "type": "string",
+        "enum": [
+          "HIT",
+          "COMPUTED",
+          "MISS_DEFAULT",
+          "DEMO"
+        ],
+        "title": "CacheStatus"
+      },
+      "CaptureResponse": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "paypal_capture_id": {
+            "type": "string",
+            "title": "Paypal Capture Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "paypal_capture_id",
+          "status"
+        ],
+        "title": "CaptureResponse"
+      },
+      "CreateOrderRequest": {
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "title": "Quote Id"
+          },
+          "opt_in": {
+            "type": "boolean",
+            "title": "Opt In"
+          },
+          "buyer_ref": {
+            "type": "string",
+            "title": "Buyer Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quote_id",
+          "opt_in",
+          "buyer_ref"
+        ],
+        "title": "CreateOrderRequest"
+      },
+      "CreateOrderResponse": {
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "title": "Order Id"
+          },
+          "internal_order_id": {
+            "type": "string",
+            "title": "Internal Order Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          },
+          "currency_code": {
+            "type": "string",
+            "title": "Currency Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_id",
+          "internal_order_id",
+          "status",
+          "total",
+          "currency_code"
+        ],
+        "title": "CreateOrderResponse"
+      },
+      "GateDecision": {
+        "type": "string",
+        "enum": [
+          "COVERAGE_AVAILABLE",
+          "BLOCKED_HIGH_RISK",
+          "MANUAL_REVIEW",
+          "UNSUPPORTED_CURRENCY"
+        ],
+        "title": "GateDecision"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "paypal_sandbox_connected": {
+            "type": "boolean",
+            "title": "Paypal Sandbox Connected"
+          },
+          "demo_mode": {
+            "type": "boolean",
+            "title": "Demo Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "paypal_sandbox_connected",
+          "demo_mode"
+        ],
+        "title": "HealthResponse"
+      },
+      "PillarScores": {
+        "properties": {
+          "s_visual": {
+            "type": "string",
+            "title": "S Visual"
+          },
+          "s_semantic": {
+            "type": "string",
+            "title": "S Semantic"
+          },
+          "s_reviews": {
+            "type": "string",
+            "title": "S Reviews"
+          },
+          "s_price": {
+            "type": "string",
+            "title": "S Price"
+          },
+          "is_ai_generated": {
+            "type": "boolean",
+            "title": "Is Ai Generated"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reason Codes",
+            "default": []
+          },
+          "model_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Model Versions"
+          },
+          "cache_status": {
+            "$ref": "#/components/schemas/CacheStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "s_visual",
+          "s_semantic",
+          "s_reviews",
+          "s_price",
+          "is_ai_generated",
+          "cache_status"
+        ],
+        "title": "PillarScores"
+      },
+      "ProtectionQuote": {
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "title": "Quote Id"
+          },
+          "merchant_id": {
+            "type": "string",
+            "title": "Merchant Id"
+          },
+          "item_hash": {
+            "type": "string",
+            "title": "Item Hash"
+          },
+          "item_price": {
+            "type": "string",
+            "title": "Item Price"
+          },
+          "currency_code": {
+            "type": "string",
+            "title": "Currency Code"
+          },
+          "protection_fee": {
+            "type": "string",
+            "title": "Protection Fee"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "hmac_signature": {
+            "type": "string",
+            "title": "Hmac Signature"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quote_id",
+          "merchant_id",
+          "item_hash",
+          "item_price",
+          "currency_code",
+          "protection_fee",
+          "expires_at",
+          "hmac_signature"
+        ],
+        "title": "ProtectionQuote"
+      },
+      "QuoteRequest": {
+        "properties": {
+          "merchant_id": {
+            "type": "string",
+            "title": "Merchant Id"
+          },
+          "item_hash": {
+            "type": "string",
+            "title": "Item Hash"
+          },
+          "item_title": {
+            "type": "string",
+            "title": "Item Title"
+          },
+          "item_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Item Price"
+          },
+          "currency_code": {
+            "type": "string",
+            "title": "Currency Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "merchant_id",
+          "item_hash",
+          "item_title",
+          "item_price",
+          "currency_code"
+        ],
+        "title": "QuoteRequest"
+      },
+      "QuoteResponse": {
+        "properties": {
+          "assessment": {
+            "$ref": "#/components/schemas/RiskAssessment"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtectionQuote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "assessment",
+          "quote"
+        ],
+        "title": "QuoteResponse"
+      },
+      "RiskAssessment": {
+        "properties": {
+          "item_hash": {
+            "type": "string",
+            "title": "Item Hash"
+          },
+          "merchant_id": {
+            "type": "string",
+            "title": "Merchant Id"
+          },
+          "pillars": {
+            "$ref": "#/components/schemas/PillarScores"
+          },
+          "trust_score": {
+            "type": "string",
+            "title": "Trust Score"
+          },
+          "s_merchant": {
+            "type": "string",
+            "title": "S Merchant"
+          },
+          "r_base": {
+            "type": "string",
+            "title": "R Base"
+          },
+          "m_penalty": {
+            "type": "string",
+            "title": "M Penalty"
+          },
+          "r_final": {
+            "type": "string",
+            "title": "R Final"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateDecision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_hash",
+          "merchant_id",
+          "pillars",
+          "trust_score",
+          "s_merchant",
+          "r_base",
+          "m_penalty",
+          "r_final",
+          "gate"
+        ],
+        "title": "RiskAssessment"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
