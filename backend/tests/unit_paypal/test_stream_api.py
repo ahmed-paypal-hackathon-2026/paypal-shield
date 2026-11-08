@@ -71,7 +71,7 @@ def _capture_and_refund(client: TestClient) -> str:
         "/api/v1/orders",
         json={"quote_id": quote["quote_id"], "buyer_ref": "buyer_stream", "opt_in": True},
     )
-    assert r.status_code == 200, r.text
+    assert r.status_code == 201, r.text
     order_id = r.json()["order_id"]
     r = client.post(f"/api/v1/orders/{order_id}/capture")
     assert r.status_code == 200, r.text

@@ -22,7 +22,6 @@ from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.reputation import score_reputation
 from app.api.response_models import MerchantTrustRow, TransactionRow
 from app.db.models import (
     LedgerEntryRow,
@@ -30,7 +29,6 @@ from app.db.models import (
     OrderRow,
     QuoteRow,
 )
-from app.schemas.contracts import MerchantReputation
 
 logger = logging.getLogger(__name__)
 
@@ -148,22 +146,32 @@ async def transaction_row_for_order(
     )
 
 
-def merchant_trust_row_for(row: MerchantReputationRow) -> MerchantTrustRow:
-    """Project a reputation DB row through the Phase 2 scorer (single oracle).
+def _derive_merchant_trust(rep: MerchantReputationRow) -> tuple[Decimal, Decimal]:
+    """Derive Bayesian trust and fraud penalty multiplier without importing app.ai."""
+    prior_m = Decimal(10)
+    prior_c = Decimal("0.70")
+    trust = (Decimal(rep.successful_orders) + prior_m * prior_c) / (
+        Decimal(rep.total_orders) + prior_m
+    )
+    penalty = (
+        Decimal("1.00")
+        if rep.verified_fraud_claims == 0
+        else Decimal("1.50")
+        if rep.verified_fraud_claims == 1
+        else Decimal("2.00")
+    )
+    return trust.quantize(Decimal("0.0001")), penalty.quantize(Decimal("0.01"))
 
-    Reuses Person 2's ``score_reputation`` verbatim: trust =
+
+def merchant_trust_row_for(row: MerchantReputationRow) -> MerchantTrustRow:
+    """Project a reputation DB row through the Bayesian scorer.
+
+    Formula (spec section 6.1 / 6.2): trust =
     (successful_orders + 7) / (total_orders + 10), m_penalty
     1.00 / 1.50 / 2.00 for 0 / 1 / 2+ verified fraud claims. Trust is derived
     on read — never stored, never invented.
     """
-    trust, _s_merchant, m_penalty, _reasons = score_reputation(
-        MerchantReputation(
-            merchant_id=row.merchant_id,
-            total_orders=int(row.total_orders),
-            successful_orders=int(row.successful_orders),
-            verified_fraud_claims=int(row.verified_fraud_claims),
-        )
-    )
+    trust, m_penalty = _derive_merchant_trust(row)
     return MerchantTrustRow(
         merchant_id=row.merchant_id,
         total_orders=int(row.total_orders),

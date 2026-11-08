@@ -35,6 +35,7 @@ from app.services.claims import (
     ALLOWED_CLAIM_TRANSITIONS,
     ClaimAmountError,
     ClaimNotCapturedError,
+    ClaimNotProtectedError,
     ClaimNotFoundError,
     ClaimUploadError,
     ClaimWindowError,
@@ -118,6 +119,7 @@ async def _seed_captured_order(
     claim_piece=None,
     created_hours_ago=1,
     dispute=False,
+    opted_in=True,
 ):
     async with db() as s:
         s.add(MerchantReputationRow(merchant_id="mer_cl"))
@@ -128,7 +130,7 @@ async def _seed_captured_order(
                 paypal_capture_id="CAP-CL-1",
                 merchant_id="mer_cl",
                 buyer_ref=buyer,
-                opted_in=True,
+                opted_in=opted_in,
                 item_price=Decimal("120.00"),
                 protection_fee=Decimal("2.70"),
                 currency_code="USD",
@@ -322,6 +324,12 @@ class TestSubmitClaim:
             with pytest.raises(ClaimUploadError):
                 await submit_claim(s, _settings(), order_ref="PAY-ord_cl7", photo_bytes=b"nope")
 
+    async def test_not_opted_in_rejected(self, db):
+        await _seed_captured_order(db, internal="ord_not_opted", opted_in=False)
+        async with db() as s:
+            with pytest.raises(ClaimNotProtectedError):
+                await submit_claim(s, _settings(), order_ref="PAY-ord_not_opted", photo_bytes=_JPEG)
+
 
 # ---------------------------------------------------------------------------
 # Pipeline: evidence -> arbitrate -> refund
@@ -334,7 +342,7 @@ class TestClaimStateMachine:
         assert ALLOWED_CLAIM_TRANSITIONS["EVIDENCE_CHECKED"] == frozenset(
             {"AUTO_APPROVED", "MANUAL_REVIEW", "REJECTED"}
         )
-        assert ALLOWED_CLAIM_TRANSITIONS["AUTO_APPROVED"] == frozenset({"REFUNDED"})
+        assert ALLOWED_CLAIM_TRANSITIONS["AUTO_APPROVED"] == frozenset({"REFUNDED", "MANUAL_REVIEW"})
         assert ALLOWED_CLAIM_TRANSITIONS["MANUAL_REVIEW"] == frozenset({"REFUNDED", "REJECTED"})
         assert ALLOWED_CLAIM_TRANSITIONS["REJECTED"] == frozenset()
         assert ALLOWED_CLAIM_TRANSITIONS["REFUNDED"] == frozenset()
@@ -847,7 +855,7 @@ def _capture_one(client: TestClient) -> str:
         "/api/v1/orders",
         json={"quote_id": quote["quote_id"], "buyer_ref": "buyer_e2e", "opt_in": True},
     )
-    assert r.status_code == 200
+    assert r.status_code == 201
     order_id = r.json()["order_id"]
     r = client.post(f"/api/v1/orders/{order_id}/capture")
     assert r.status_code == 200

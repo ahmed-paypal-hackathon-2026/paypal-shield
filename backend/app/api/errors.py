@@ -32,6 +32,7 @@ from app.services.quotes import (
 from app.services.claims import (
     ClaimAmountError,
     ClaimNotCapturedError,
+    ClaimNotProtectedError,
     ClaimNotFoundError,
     ClaimUploadError,
     ClaimWindowError,
@@ -162,6 +163,14 @@ def install_error_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content=_error_body("ORDER_NOT_CLAIM_ELIGIBLE", "order is not eligible for a claim"),
+        )
+
+    @app.exception_handler(ClaimNotProtectedError)
+    async def _claim_not_protected_handler(request: Request, exc: ClaimNotProtectedError):
+        logger.warning("claim rejected: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=_error_body("ORDER_NOT_PROTECTED", "order did not opt into Buyer Protection"),
         )
 
     @app.exception_handler(ClaimAmountError)

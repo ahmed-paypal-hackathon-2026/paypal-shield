@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS quotes (
 
 CREATE TABLE IF NOT EXISTS orders (
     internal_order_id UUID PRIMARY KEY,
-    quote_id          UUID NOT NULL REFERENCES quotes(quote_id),
+    quote_id          TEXT NOT NULL REFERENCES quotes(quote_id),
     paypal_order_id   TEXT UNIQUE,
     paypal_capture_id TEXT UNIQUE,
     merchant_id       TEXT NOT NULL REFERENCES merchant_reputation(merchant_id),

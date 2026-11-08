@@ -156,6 +156,7 @@ async def submit_claim(
         settings,
         transport,
         claim_id=str(claim.claim_id),
+        photo_bytes=photo_bytes,
         risk_engine=request.app.state.risk_engine,
     )
     return await claims_service.get_claim_record(session, str(claim.claim_id))

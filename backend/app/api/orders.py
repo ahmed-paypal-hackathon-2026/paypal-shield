@@ -35,7 +35,12 @@ def _get_transport(request: Request):
     return transport
 
 
-@router.post("/orders", response_model=CreateOrderResponse)
+@router.post(
+    "/orders",
+    response_model=CreateOrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="createOrder",
+)
 async def create_order(
     body: CreateOrderRequest,
     request: Request,

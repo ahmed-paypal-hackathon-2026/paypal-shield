@@ -54,7 +54,7 @@ def test_full_demo_chain_quote_order_capture(tmp_path):
             "/api/v1/orders",
             json={"quote_id": quote["quote_id"], "buyer_ref": "buyer_001", "opt_in": True},
         )
-        assert r.status_code == 200
+        assert r.status_code == 201
         order = r.json()
         assert order["order_id"].startswith("DEMO")
         assert order["status"] == "ORDER_CREATED"

@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_CLAIM_TRANSITIONS: dict[str, frozenset[str]] = {
     "SUBMITTED": frozenset({"EVIDENCE_CHECKED"}),
     "EVIDENCE_CHECKED": frozenset({"AUTO_APPROVED", "MANUAL_REVIEW", "REJECTED"}),
-    "AUTO_APPROVED": frozenset({"REFUNDED"}),
+    "AUTO_APPROVED": frozenset({"REFUNDED", "MANUAL_REVIEW"}),
     "MANUAL_REVIEW": frozenset({"REFUNDED", "REJECTED"}),
     "REJECTED": frozenset(),
     "REFUNDED": frozenset(),
@@ -94,6 +94,10 @@ class ClaimWindowError(ClaimError):
 
 class ClaimNotCapturedError(ClaimError):
     """Order tied to the claim is not CAPTURED."""
+
+
+class ClaimNotProtectedError(ClaimError):
+    """Order tied to the claim did not opt into Buyer Protection."""
 
 
 class ClaimAmountError(ClaimError):
@@ -235,6 +239,11 @@ async def submit_claim(
     if order.state != "CAPTURED" or not order.paypal_capture_id:
         raise ClaimNotCapturedError(
             f"order {order_ref} is {order.state}, not eligible for a claim"
+        )
+
+    if not order.opted_in:
+        raise ClaimNotProtectedError(
+            f"order {order_ref} did not purchase a Protection Plan"
         )
 
     captured_at = await _capture_time(session, order)
@@ -391,6 +400,7 @@ async def _arbitrate(
     settings: Settings,
     claim: ClaimRow,
     order: OrderRow,
+    received_image: Optional[bytes] = None,
     risk_engine=None,
 ) -> ArbiterDecision:
     """Engine arbitration with stub fallback (REQ-NF-03 never 500s a claim)."""
@@ -410,8 +420,12 @@ async def _arbitrate(
         buyer_claim_ratio=ratio,
         dispute_active=bool(order.dispute_active),
     )
-    listing = _listing_placeholder_bytes(order.quote_id)
-    received = _received_placeholder_bytes(claim)
+    from app.db.models import QuoteRow
+
+    quote_row = await session.get(QuoteRow, order.quote_id)
+    item_hash = quote_row.item_hash if quote_row is not None else order.quote_id
+    listing = _listing_placeholder_bytes(item_hash)
+    received = received_image if received_image is not None else _received_placeholder_bytes(claim)
     try:
         engine = risk_engine if risk_engine is not None else get_risk_engine()
         decision = await engine.arbitrate(claim_record, listing, received, ctx)
@@ -464,6 +478,7 @@ async def run_claim_pipeline(
     transport,
     *,
     claim_id: str,
+    photo_bytes: Optional[bytes] = None,
     risk_engine=None,
 ) -> None:
     """Evidence -> arbitrate -> auto-refund. Safe to run repeatedly."""
@@ -512,6 +527,7 @@ async def run_claim_pipeline(
                 settings,
                 claim,
                 order,
+                received_image=photo_bytes,
                 risk_engine=risk_engine,
             )
             claim.discrepancy = decision.discrepancy_score
@@ -981,6 +997,7 @@ __all__ = [
     "ClaimNotFoundError",
     "ClaimWindowError",
     "ClaimNotCapturedError",
+    "ClaimNotProtectedError",
     "ClaimAmountError",
     "ClaimUploadError",
     "IllegalClaimTransition",
