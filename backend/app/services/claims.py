@@ -571,15 +571,18 @@ async def execute_refund(
       PENDING   -> stays AUTO_APPROVED, awaiting webhook confirmation
       client error -> MANUAL_REVIEW with REFUND_ISSUE_<code>
       transient -> stays, REFUND_TRANSIENT_RETRY_LATER
+
+    Concurrency Note (DEF-01): The remote PayPal call is performed outside
+    any open DB transaction. DB row locks (with_for_update) are acquired
+    only in short-lived transactions before (validation) and after (persistence)
+    the remote call, never during external network retries.
     """
+    key = _claim_key(claim_id)
+
+    # 1. Short-lived read: validate eligibility and extract parameters.
+    # Released immediately before any remote network call.
     async with session_factory() as session:
-        claim = (
-            await session.execute(
-                select(ClaimRow)
-                .where(ClaimRow.claim_id == _claim_key(claim_id))
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
+        claim = await session.get(ClaimRow, key)
         if claim is None:
             raise ClaimNotFoundError(f"unknown claim {claim_id}")
         if claim.state == ClaimState.REFUNDED.value:
@@ -605,7 +608,7 @@ async def execute_refund(
             await commit_and_emit(session)
             return claim
 
-        # Local idempotency line: refunds.claim_id unique.
+        # Local idempotency check: already COMPLETED refund
         existing = (
             await session.execute(
                 select(RefundRow).where(RefundRow.claim_id == claim.claim_id)
@@ -615,26 +618,67 @@ async def execute_refund(
             logger.info("refund for claim %s already COMPLETED; replay", claim_id)
             return await _finalize_refunded(session, claim, order, existing, actor)
 
-        try:
-            response = await refund_capture(
-                transport,
-                capture_id=str(order.paypal_capture_id),
-                claim_id=str(claim.claim_id),
-                item_price=Decimal(str(order.item_price)),
-                claim_amount=Decimal(str(claim.claim_amount)),
-                currency_code=claim.currency_code,
+        # Snapshot parameters needed for remote refund call
+        capture_id = str(order.paypal_capture_id)
+        claim_uuid = claim.claim_id
+        item_price = Decimal(str(order.item_price))
+        claim_amount = Decimal(str(claim.claim_amount))
+        currency_code = claim.currency_code
+
+    # 2. Remote call outside any open DB transaction or row lock.
+    refund_error_type: Optional[str] = None
+    client_exc: Optional[PayPalClientError] = None
+    transient_exc: Optional[Exception] = None
+    status: str = ""
+    refund_id: str = ""
+
+    try:
+        response = await refund_capture(
+            transport,
+            capture_id=capture_id,
+            claim_id=str(claim_uuid),
+            item_price=item_price,
+            claim_amount=claim_amount,
+            currency_code=currency_code,
+        )
+        status = extract_refund_status(response).upper()
+        refund_id = extract_refund_id(response)
+    except PayPalClientError as exc:
+        refund_error_type = "client"
+        client_exc = exc
+    except (PayPalTransientError, PayPalAuthError) as exc:
+        refund_error_type = "transient"
+        transient_exc = exc
+
+    # 3. Fresh transaction with row lock to persist the outcome.
+    async with session_factory() as session:
+        claim = (
+            await session.execute(
+                select(ClaimRow)
+                .where(ClaimRow.claim_id == claim_uuid)
+                .with_for_update()
             )
-            status = extract_refund_status(response).upper()
-            refund_id = extract_refund_id(response)
-        except PayPalClientError as exc:
-            issue = exc.issues[0] if exc.issues else "REFUND_CLIENT_ERROR"
+        ).scalar_one_or_none()
+        if claim is None:
+            raise ClaimNotFoundError(f"unknown claim {claim_id}")
+
+        if claim.state == ClaimState.REFUNDED.value:
+            return claim
+
+        order = await session.get(OrderRow, claim.internal_order_id)
+        if order is None:  # pragma: no cover
+            return claim
+
+        if refund_error_type == "client":
+            assert client_exc is not None
+            issue = client_exc.issues[0] if client_exc.issues else "REFUND_CLIENT_ERROR"
             logger.warning("refund rejected claim=%s issue=%s", claim_id, issue)
             prev = claim.state
             claim.state = ClaimState.MANUAL_REVIEW.value
             await _event(
                 session, claim, from_state=prev,
                 to_state=ClaimState.MANUAL_REVIEW.value, actor=actor,
-                reason_codes=[f"REFUND_ISSUE_{issue}", f"DEBUG_{exc.debug_id or 'n/a'}"],
+                reason_codes=[f"REFUND_ISSUE_{issue}", f"DEBUG_{client_exc.debug_id or 'n/a'}"],
             )
             enqueue_event(
                 session, "claim", "update",
@@ -642,8 +686,9 @@ async def execute_refund(
             )
             await commit_and_emit(session)
             return claim
-        except (PayPalTransientError, PayPalAuthError) as exc:
-            logger.warning("refund transient exhaustion claim=%s (%s)", claim_id, exc)
+
+        if refund_error_type == "transient":
+            logger.warning("refund transient exhaustion claim=%s (%s)", claim_id, transient_exc)
             await _event(
                 session, claim, from_state=claim.state,
                 to_state=claim.state, actor=actor,
@@ -655,6 +700,12 @@ async def execute_refund(
             )
             await commit_and_emit(session)
             return claim
+
+        existing = (
+            await session.execute(
+                select(RefundRow).where(RefundRow.claim_id == claim.claim_id)
+            )
+        ).scalar_one_or_none()
 
         if existing is None:
             existing = RefundRow(

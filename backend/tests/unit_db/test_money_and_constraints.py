@@ -1,4 +1,4 @@
-﻿"""Database layer property tests (Person 1).
+"""Database layer property tests (Person 1).
 
 - Money never round-trips through float (in-memory SQLite + canonical strings).
 - Unique constraints give the second line of idempotency defense:
