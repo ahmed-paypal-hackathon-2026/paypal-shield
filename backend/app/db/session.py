@@ -56,10 +56,53 @@ def make_session_factory(engine: AsyncEngine) -> async_sessionmaker:
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+CANONICAL_DEMO_MERCHANTS = [
+    {
+        "merchant_id": "mer_audio_den",
+        "total_orders": 200,
+        "successful_orders": 190,
+        "verified_fraud_claims": 0,
+    },
+    {
+        "merchant_id": "mer_dash_deals",
+        "total_orders": 2,
+        "successful_orders": 2,
+        "verified_fraud_claims": 0,
+    },
+    {
+        "merchant_id": "mer_refurb_find",
+        "total_orders": 40,
+        "successful_orders": 30,
+        "verified_fraud_claims": 2,
+    },
+]
+
+
+async def seed_demo_merchants(engine: AsyncEngine) -> None:
+    """Pre-seed canonical demo merchants so Bayesian priors calculate correctly."""
+    from app.db.models import MerchantReputationRow
+
+    factory = make_session_factory(engine)
+    async with factory() as session:
+        for seed in CANONICAL_DEMO_MERCHANTS:
+            existing = await session.get(MerchantReputationRow, seed["merchant_id"])
+            if existing is None:
+                session.add(
+                    MerchantReputationRow(
+                        merchant_id=seed["merchant_id"],
+                        total_orders=seed["total_orders"],
+                        successful_orders=seed["successful_orders"],
+                        verified_fraud_claims=seed["verified_fraud_claims"],
+                    )
+                )
+        await session.commit()
+
+
 async def create_all(engine: AsyncEngine) -> None:
     """Create every table from the canonical metadata (dev/test bootstrap)."""
     async with engine.begin() as conn:
         await conn.run_sync(_ModelsBase.metadata.create_all)
+    await seed_demo_merchants(engine)
 
 
 async def get_session(

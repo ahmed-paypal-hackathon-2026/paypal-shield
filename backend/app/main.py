@@ -132,6 +132,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.is_sqlite:
             # Dev/test bootstrap; Postgres deployments run Alembic migrations.
             await create_all(app.state.db_engine)
+        elif settings.demo_deterministic_mode:
+            from app.db.session import seed_demo_merchants
+
+            await seed_demo_merchants(app.state.db_engine)
 
         app.state.risk_engine = EngineProvider(settings).get()
         app.state.fallback_engine = fallback_engine()

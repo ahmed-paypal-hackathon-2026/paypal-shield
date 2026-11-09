@@ -156,7 +156,12 @@ export class MockApi implements ShieldApi {
   }
 
   createOrder(req: CreateOrderRequest): Promise<CreateOrderResponse> {
-    const scenario = this._quoteScenarios.get(req.quote_id) ?? "trusted";
+    const scenarioKey =
+      this._quoteScenarios.get(req.quote_id) ??
+      (req.quote_id.startsWith("unbacked_")
+        ? (req.quote_id.replace("unbacked_", "") as ScenarioId)
+        : "trusted");
+    const scenario = seeds[scenarioKey] ? scenarioKey : "trusted";
     const seed = seeds[scenario];
     const fee = req.opt_in && seed.fee ? seed.fee : "0.00";
     const resp: CreateOrderResponse = {

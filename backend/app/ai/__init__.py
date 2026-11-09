@@ -229,21 +229,22 @@ class ShieldRiskEngine:
         if assessment.gate == GateDecision.BLOCKED_HIGH_RISK:
             return None
 
+        from app.services.quotes import canonical_quote_string, sign_canonical
+
         fee = self.price_fee(assessment, req.item_price, req.currency_code)
         quote_id = f"q_{uuid.uuid4().hex[:16]}"
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
 
-        sig = sign_quote(
+        canonical = canonical_quote_string(
             quote_id=quote_id,
             merchant_id=req.merchant_id,
             item_hash=req.item_hash,
             item_price=req.item_price,
             currency_code=req.currency_code,
-            fee=fee,
-            is_eligible=True,
+            protection_fee=fee,
             expires_at=expires_at,
-            hmac_secret=hmac_secret,
         )
+        sig = sign_canonical(canonical, [hmac_secret])
 
         return ProtectionQuote(
             quote_id=quote_id,

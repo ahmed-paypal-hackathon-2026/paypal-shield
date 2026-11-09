@@ -46,7 +46,8 @@ export class LiveApi implements ShieldApi {
       const detail = await res.text().catch(() => "");
       let message = `HTTP ${res.status}`;
       try {
-        message = JSON.parse(detail).detail ?? message;
+        const parsed = JSON.parse(detail);
+        message = parsed.error?.message ?? parsed.detail ?? message;
       } catch {
         if (detail) message = detail.slice(0, 200);
       }
@@ -92,7 +93,10 @@ export class LiveApi implements ShieldApi {
   resolveClaim(claimId: string, decision: "REFUND" | "REJECT", reasonCode: string) {
     return this.call<ClaimRecord>(`/api/v1/claims/${enc(claimId)}/resolve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Reviewer-Token": appConfig.claimReviewerToken,
+      },
       body: JSON.stringify({ decision, reason_code: reasonCode }),
     });
   }

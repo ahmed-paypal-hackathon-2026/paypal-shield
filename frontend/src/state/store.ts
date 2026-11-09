@@ -85,11 +85,13 @@ export const useShield = create<ShieldStore>((set, get) => {
         set((s) => ({
           transactions: applyRow(s.transactions, env.record, env.action, "internal_order_id"),
         }));
+        void loadLedger();
         break;
       case "claim":
         set((s) => ({
           claims: applyRow(s.claims, env.record, env.action, "claim_id"),
         }));
+        void loadLedger();
         break;
       case "merchant":
         set((s) => ({
@@ -165,7 +167,7 @@ export const useShield = create<ShieldStore>((set, get) => {
       try {
         const res: QuoteResponse = await api.quote({
           merchant_id: meta.merchantId,
-          item_hash: "",
+          item_hash: meta.itemHash,
           item_title: meta.label,
           item_price: meta.id === "trusted" ? "120.00" : meta.id === "scam" ? "80.00" : "60.00",
           currency_code: "USD",
@@ -194,8 +196,9 @@ export const useShield = create<ShieldStore>((set, get) => {
         capture: null,
       });
       try {
+        const quoteId = quote?.quote_id ?? `unbacked_${scenario}`;
         const order = await api.createOrder({
-          quote_id: quote?.quote_id ?? "",
+          quote_id: quoteId,
           opt_in: optIn && quote !== null,
           buyer_ref: "demo-buyer",
         } satisfies CreateOrderRequest);

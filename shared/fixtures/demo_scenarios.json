@@ -11,6 +11,7 @@
         "verified_fraud_claims": 0
       },
       "item": {
+        "item_hash": "b3a9e55dde37b80d97fa8713a01dda91d3c1c7f2e33bd0cf8a35f4f4e3a11c05",
         "item_title": "AudioMax Studio Headphones",
         "item_price": "120.00",
         "currency_code": "USD",
@@ -37,6 +38,7 @@
         "verified_fraud_claims": 0
       },
       "item": {
+        "item_hash": "9d40b7a2c02df11bff6f398ba9dfde04c8f2fba666561e4b7a4d9b4c4f00ad21",
         "item_title": "AuraGlow 8K Camera Bundle",
         "item_price": "80.00",
         "currency_code": "USD",
@@ -63,6 +65,7 @@
         "verified_fraud_claims": 2
       },
       "item": {
+        "item_hash": "4c8d2ca1d5d63a1eb9b60a15b4a1f8bff38dcdbf7a8c3d10b8dcfc8d3a417bae",
         "item_title": "RefurbOne GPU, like new",
         "item_price": "60.00",
         "currency_code": "USD",

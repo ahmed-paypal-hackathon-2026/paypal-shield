@@ -30,6 +30,8 @@ services:
         value: https://shield-storefront.onrender.com
       - key: QUOTES_HMAC_KEY
         generateValue: true
+      - key: CLAIM_REVIEWER_TOKEN
+        generateValue: true
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
@@ -64,4 +66,4 @@ services:
       - key: VITE_PAYPAL_CLIENT_ID
         sync: false
       - key: VITE_ALLOW_MOCK
-        value: true
+        value: "false"
