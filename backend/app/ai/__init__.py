@@ -38,6 +38,8 @@ from app.ai.demo_cache import get_demo_pillars, get_demo_assessment, is_demo_mod
 from app.ai.reputation import score_reputation
 from app.ai.engine.actuarial import compute_risk, compute_fee, sign_quote
 from app.ai.arbiter import arbitrate_claim
+from app.ai.visual import VisualArbiter
+from app.ai.clip_semantic import SemanticArbiter
 
 # Lazy imports for the heavy pillar scorers (avoid import-time model loading)
 _visual_module: Optional[object] = None
@@ -264,4 +266,6 @@ engine = ShieldRiskEngine()
 __all__ = [
     "ShieldRiskEngine",
     "engine",
+    "VisualArbiter",
+    "SemanticArbiter",
 ]
