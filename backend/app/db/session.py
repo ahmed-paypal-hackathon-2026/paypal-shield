@@ -77,10 +77,61 @@ CANONICAL_DEMO_MERCHANTS = [
     },
 ]
 
+DEMO_RISK_CACHE_SEEDS = [
+    {
+        "merchant_id": "mer_audio_den",
+        "image_hash": "b3a9e55dde37b80d97fa8713a01dda91d3c1c7f2e33bd0cf8a35f4f4e3a11c05",
+        "titles": ["AudioMax Studio Headphones", "Trusted merchant", "Demo Headphones", ""],
+        "pillars": {
+            "s_visual": "0.0500",
+            "s_semantic": "0.1000",
+            "s_reviews": "0.1000",
+            "s_price": "0.1000",
+            "is_ai_generated": False,
+            "reason_codes": ["REP_VERIFIED_HISTORY"],
+            "model_versions": {"visual": "heuristic-v1", "semantic": "clip-ViT-B-32"},
+            "cache_status": "HIT",
+        },
+    },
+    {
+        "merchant_id": "mer_dash_deals",
+        "image_hash": "9d40b7a2c02df11bff6f398ba9dfde04c8f2fba666561e4b7a4d9b4c4f00ad21",
+        "titles": ["AuraGlow 8K Camera Bundle", "AI-generated scam listing", "Demo Camera", ""],
+        "pillars": {
+            "s_visual": "0.9200",
+            "s_semantic": "0.8500",
+            "s_reviews": "0.7000",
+            "s_price": "0.9000",
+            "is_ai_generated": True,
+            "reason_codes": ["VIS_AI_GENERATED", "SEM_LOW_ALIGNMENT", "REV_KEYWORD_KNOCKOFF", "PRICE_EXTREME_UNDER"],
+            "model_versions": {"visual": "heuristic-v1", "semantic": "clip-ViT-B-32"},
+            "cache_status": "HIT",
+        },
+    },
+    {
+        "merchant_id": "mer_refurb_find",
+        "image_hash": "4c8d2ca1d5d63a1eb9b60a15b4a1f8bff38dcdbf7a8c3d10b8dcfc8d3a417bae",
+        "titles": ["RefurbOne GPU, like new", "Repeat offender", "Demo GPU", ""],
+        "pillars": {
+            "s_visual": "0.5000",
+            "s_semantic": "0.4000",
+            "s_reviews": "0.6000",
+            "s_price": "0.3000",
+            "is_ai_generated": False,
+            "reason_codes": ["REP_FLAGGED_HISTORY"],
+            "model_versions": {"visual": "heuristic-v1", "semantic": "clip-ViT-B-32"},
+            "cache_status": "HIT",
+        },
+    },
+]
+
 
 async def seed_demo_merchants(engine: AsyncEngine) -> None:
-    """Pre-seed canonical demo merchants so Bayesian priors calculate correctly."""
-    from app.db.models import MerchantReputationRow
+    """Pre-seed canonical demo merchants, risk cache, and unbacked quotes."""
+    from datetime import datetime, timedelta, timezone
+    import hashlib
+    from decimal import Decimal
+    from app.db.models import MerchantReputationRow, RiskCacheRow, QuoteRow
 
     factory = make_session_factory(engine)
     async with factory() as session:
@@ -95,6 +146,51 @@ async def seed_demo_merchants(engine: AsyncEngine) -> None:
                         verified_fraud_claims=seed["verified_fraud_claims"],
                     )
                 )
+            elif existing.total_orders == 0 and existing.successful_orders == 0:
+                existing.total_orders = seed["total_orders"]
+                existing.successful_orders = seed["successful_orders"]
+                existing.verified_fraud_claims = seed["verified_fraud_claims"]
+        await session.flush()
+
+        far_future = datetime.now(timezone.utc) + timedelta(days=3650)
+        for fixture in DEMO_RISK_CACHE_SEEDS:
+            img_h = fixture["image_hash"]
+            for t in fixture["titles"]:
+                th = hashlib.sha256(f"{t.strip().lower()} ".encode("utf-8")).hexdigest()
+                existing_cache = await session.get(RiskCacheRow, (img_h, th))
+                if existing_cache is None:
+                    session.add(
+                        RiskCacheRow(
+                            image_hash=img_h,
+                            text_hash=th,
+                            pillars_json=fixture["pillars"],
+                            model_versions=fixture["pillars"]["model_versions"],
+                            expires_at=far_future,
+                        )
+                    )
+
+        unbacked_quotes = [
+            ("unbacked_mer_refurb_find", "mer_refurb_find", "4c8d2ca1d5d63a1eb9b60a15b4a1f8bff38dcdbf7a8c3d10b8dcfc8d3a417bae", Decimal("60.00"), Decimal("81.00")),
+            ("unbacked_offender", "mer_refurb_find", "4c8d2ca1d5d63a1eb9b60a15b4a1f8bff38dcdbf7a8c3d10b8dcfc8d3a417bae", Decimal("60.00"), Decimal("81.00")),
+        ]
+        for qid, mer, h, price, r_fin in unbacked_quotes:
+            existing_q = await session.get(QuoteRow, qid)
+            if existing_q is None:
+                session.add(
+                    QuoteRow(
+                        quote_id=qid,
+                        merchant_id=mer,
+                        item_hash=h,
+                        item_price=price,
+                        currency_code="USD",
+                        protection_fee=Decimal("0.00"),
+                        r_final=r_fin,
+                        expires_at=far_future,
+                        hmac_signature="unbacked",
+                        consumed=False,
+                    )
+                )
+
         await session.commit()
 
 

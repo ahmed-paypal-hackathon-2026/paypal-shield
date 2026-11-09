@@ -31,21 +31,31 @@ from decimal import Decimal
 from typing import Optional, Dict, Any
 
 # ---------------------------------------------------------------------------
-# Sentinel set: all known demo merchant IDs
+# Sentinel set: all known demo merchant IDs and item hash mappings
 # ---------------------------------------------------------------------------
 _DEMO_MERCHANT_IDS: frozenset[str] = frozenset(
     {"mer_audio_den", "mer_dash_deals", "mer_refurb_find"}
 )
 
+_DEMO_HASH_TO_MERCHANT: Dict[str, str] = {
+    "b3a9e55dde37b80d97fa8713a01dda91d3c1c7f2e33bd0cf8a35f4f4e3a11c05": "mer_audio_den",
+    "9d40b7a2c02df11bff6f398ba9dfde04c8f2fba666561e4b7a4d9b4c4f00ad21": "mer_dash_deals",
+    "4c8d2ca1d5d63a1eb9b60a15b4a1f8bff38dcdbf7a8c3d10b8dcfc8d3a417bae": "mer_refurb_find",
+    "trusted": "mer_audio_den",
+    "scam": "mer_dash_deals",
+    "offender": "mer_refurb_find",
+}
 
-def is_demo_mode(merchant_id: Optional[str] = None) -> bool:
+
+def is_demo_mode(identifier: Optional[str] = None) -> bool:
     """Return True if demo mode is active.
 
     When called with no args: returns True if DEMO_DETERMINISTIC_MODE or SHIELD_DEMO_MODE env var is set.
-    When called with a merchant_id: returns True if that merchant is a demo scenario.
+    When called with a merchant_id or item_hash: returns True if that identifier is a demo scenario.
     """
-    if merchant_id is not None:
-        return merchant_id in _DEMO_MERCHANT_IDS
+    if identifier is not None:
+        mer_id = _DEMO_HASH_TO_MERCHANT.get(identifier, identifier)
+        return mer_id in _DEMO_MERCHANT_IDS
     val = os.environ.get("DEMO_DETERMINISTIC_MODE") or os.environ.get("SHIELD_DEMO_MODE", "")
     return val.strip().lower() in ("1", "true", "yes")
 
@@ -121,13 +131,14 @@ _DEMO_PILLARS_RAW: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_demo_pillars(merchant_id: str) -> Optional[Any]:
-    """Return a PillarScores object for a demo merchant, or None.
+def get_demo_pillars(identifier: str) -> Optional[Any]:
+    """Return a PillarScores object for a demo merchant or item_hash, or None.
 
     Returns a fully constructed PillarScores (Pydantic model) when pydantic
     is available, or a plain dict in test environments without it.
     """
-    raw = _DEMO_PILLARS_RAW.get(merchant_id)
+    mer_id = _DEMO_HASH_TO_MERCHANT.get(identifier, identifier)
+    raw = _DEMO_PILLARS_RAW.get(mer_id)
     if raw is None:
         return None
 
@@ -147,19 +158,21 @@ def get_demo_pillars(merchant_id: str) -> Optional[Any]:
         return dict(raw)
 
 
-def get_demo_pillars_raw(merchant_id: str) -> Optional[Dict[str, Any]]:
+def get_demo_pillars_raw(identifier: str) -> Optional[Dict[str, Any]]:
     """Return the raw Decimal dict for a demo merchant (no pydantic required)."""
-    data = _DEMO_PILLARS_RAW.get(merchant_id)
+    mer_id = _DEMO_HASH_TO_MERCHANT.get(identifier, identifier)
+    data = _DEMO_PILLARS_RAW.get(mer_id)
     return dict(data) if data is not None else None
 
 
-def get_demo_assessment(merchant_id: str, item_hash: str) -> Optional[Dict[str, Any]]:
+def get_demo_assessment(identifier: str, item_hash: str) -> Optional[Dict[str, Any]]:
     """Return a complete pre-computed RiskAssessment dict for a demo merchant.
 
-    Returns None if merchant_id is not a demo scenario.
+    Returns None if identifier is not a demo scenario.
     All monetary and risk values are Decimal — no floats.
     """
-    data = _DEMO_PILLARS_RAW.get(merchant_id)
+    mer_id = _DEMO_HASH_TO_MERCHANT.get(identifier, identifier)
+    data = _DEMO_PILLARS_RAW.get(mer_id)
     if data is None:
         return None
 

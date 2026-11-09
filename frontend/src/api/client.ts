@@ -114,6 +114,9 @@ export class LiveApi implements ShieldApi {
   }
 
   subscribe(handler: StreamHandler): Unsubscribe {
+    if (typeof EventSource === "undefined") {
+      return () => {};
+    }
     const source = new EventSource(`${this.base}/api/v1/stream`);
     const listeners: Array<[string, (ev: MessageEvent) => void]> = [];
     for (const topic of ["transaction", "claim", "merchant"] as const) {

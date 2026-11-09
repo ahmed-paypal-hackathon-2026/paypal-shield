@@ -46,11 +46,11 @@ export function CheckoutPanel() {
   );
 
   useEffect(() => {
-    if (mode === "mock" && checkoutPhase === "awaiting_approval") {
+    if ((mode === "mock" || blocked) && checkoutPhase === "awaiting_approval") {
       const id = window.setTimeout(() => void approveCapture(), 600);
       return () => window.clearTimeout(id);
     }
-  }, [mode, checkoutPhase, approveCapture]);
+  }, [mode, blocked, checkoutPhase, approveCapture]);
 
   if (!scenario) return null;
 
@@ -81,6 +81,11 @@ export function CheckoutPanel() {
               </button>
             )}
           </div>
+          {checkoutError && (
+            <p data-testid="checkout-error" className="mt-3 rounded-lg bg-red-100 p-3 text-xs text-red-800">
+              {checkoutError}
+            </p>
+          )}
         </div>
       ) : (
         quote && (

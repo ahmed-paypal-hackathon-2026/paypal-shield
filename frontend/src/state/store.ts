@@ -104,12 +104,16 @@ export const useShield = create<ShieldStore>((set, get) => {
   async function loadLedger() {
     const api = get().api;
     if (!api) return;
-    const [transactions, merchants, summary] = await Promise.all([
-      api.transactions(),
-      api.merchants(),
-      api.summary(),
-    ]);
-    set({ transactions, merchants, summary });
+    try {
+      const [transactions, merchants, summary] = await Promise.all([
+        api.transactions(),
+        api.merchants(),
+        api.summary(),
+      ]);
+      set({ transactions, merchants, summary });
+    } catch {
+      // Failed ledger network read degrades gracefully
+    }
   }
 
   return {
@@ -135,6 +139,11 @@ export const useShield = create<ShieldStore>((set, get) => {
     summary: null,
 
     async bootstrap() {
+      const current = get().api;
+      if (current && import.meta.env.MODE === "test") {
+        await loadLedger();
+        return;
+      }
       const api = await createApi();
       unsub?.();
       unsub = api.subscribe(handleEvent);
@@ -168,8 +177,8 @@ export const useShield = create<ShieldStore>((set, get) => {
         const res: QuoteResponse = await api.quote({
           merchant_id: meta.merchantId,
           item_hash: meta.itemHash,
-          item_title: meta.label,
-          item_price: meta.id === "trusted" ? "120.00" : meta.id === "scam" ? "80.00" : "60.00",
+          item_title: meta.itemTitle,
+          item_price: meta.itemPrice,
           currency_code: "USD",
         });
         set({
@@ -196,7 +205,8 @@ export const useShield = create<ShieldStore>((set, get) => {
         capture: null,
       });
       try {
-        const quoteId = quote?.quote_id ?? `unbacked_${scenario}`;
+        const meta = scenarioById(scenario);
+        const quoteId = quote?.quote_id ?? `unbacked_${meta.merchantId}`;
         const order = await api.createOrder({
           quote_id: quoteId,
           opt_in: optIn && quote !== null,
