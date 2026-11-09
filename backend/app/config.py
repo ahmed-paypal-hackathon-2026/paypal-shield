@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     quotes_hmac_key: str = ""
     quotes_hmac_key_previous: str = ""  # accepted during rotation window
     quotes_ttl_seconds: int = 600
+    risk_cache_ttl_seconds: int = 3600
     hmac_rotate_tolerate_missing_previous: bool = True
 
     # --- Databases ----------------------------------------------------------

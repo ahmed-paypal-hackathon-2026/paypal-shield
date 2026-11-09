@@ -24,7 +24,7 @@ services:
     environment:
       PAYPAL_API_BASE: ${PAYPAL_API_BASE:-https://api-m.sandbox.paypal.com}
       ALLOW_NON_SANDBOX: ${ALLOW_NON_SANDBOX:-false}
-      DEMO_DETERMINISTIC_MODE: ${DEMO_DETERMINISTIC_MODE:-true}
+      DEMO_DETERMINISTIC_MODE: ${DEMO_DETERMINISTIC_MODE:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173}
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}

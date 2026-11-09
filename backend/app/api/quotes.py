@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -176,12 +177,45 @@ def default_pillars() -> PillarScores:
     )
 
 
+def is_mock_or_default_pillars(data: dict) -> bool:
+    """Return True if cached entry is static mock data or conservative default scores.
+
+    Dynamic live-computed rows contain 'computed_live': True.
+    """
+    if data.get("computed_live") is True:
+        return False
+
+    reasons = set(data.get("reason_codes") or [])
+    if "VIS_FALLBACK_DEFAULT" in reasons:
+        return True
+
+    try:
+        s_vis = Decimal(str(data.get("s_visual", "0.50")))
+        s_sem = Decimal(str(data.get("s_semantic", "0.50")))
+        s_rev = Decimal(str(data.get("s_reviews", "0.50")))
+        s_price = Decimal(str(data.get("s_price", "0.50")))
+        if s_vis == Decimal("0.50") and s_sem == Decimal("0.50") and s_rev == Decimal("0.50") and s_price == Decimal("0.50"):
+            return True
+    except Exception:
+        return True
+
+    return True
+
+
 async def load_cached_pillars(
     session: AsyncSession,
     item_hash: str,
     text_hash: str,
     merchant_id: Optional[str] = None,
 ) -> Optional[PillarScores]:
+    """Look up authentic live-computed pillars in risk_cache.
+
+    Returns PillarScores on a valid unexpired live-computed cache hit,
+    or None on cache miss / mock values. Does NOT return demo_cache numbers.
+    """
+    if not item_hash:
+        return None
+
     row = (
         await session.execute(
             select(RiskCacheRow).where(
@@ -207,30 +241,75 @@ async def load_cached_pillars(
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at > now:
             data = dict(row.pillars_json or {})
+            if is_mock_or_default_pillars(data):
+                logger.info(
+                    "risk_cache entry for %s contains mock/default values (treating as miss)",
+                    item_hash,
+                )
+                return None
+
             data.pop("cache_status", None)
             try:
-                return PillarScores(**data, cache_status=CacheStatus.HIT)
-            except Exception:  # noqa: BLE001 - malformed cache entry is a miss, not an error
+                scores = PillarScores(**data, cache_status=CacheStatus.HIT)
+                logger.info("Risk cache hit for %s", item_hash)
+                return scores
+            except Exception:
                 logger.warning("malformed risk_cache entry for %s (miss)", item_hash)
-
-    from app.ai.demo_cache import get_demo_pillars
-
-    demo_p = None
-    if merchant_id:
-        demo_p = get_demo_pillars(merchant_id)
-    if demo_p is None:
-        demo_p = get_demo_pillars(item_hash)
-    if demo_p is not None:
-        if isinstance(demo_p, PillarScores):
-            return demo_p
-        data = dict(demo_p)
-        data.pop("cache_status", None)
-        try:
-            return PillarScores(**data, cache_status=CacheStatus.HIT)
-        except Exception:
-            return None
+                return None
 
     return None
+
+
+async def save_risk_cache(
+    session: AsyncSession,
+    item_hash: str,
+    text_hash: str,
+    pillars: PillarScores,
+    ttl_seconds: int = 3600,
+) -> None:
+    """Persist authentic calculated scores into risk_cache with a valid TTL."""
+    if not item_hash:
+        return
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=ttl_seconds)
+
+    pillars_dict = pillars.model_dump(mode="json")
+    pillars_dict["computed_live"] = True
+
+    model_versions = dict(pillars.model_versions or {})
+    model_versions["live"] = True
+
+    try:
+        existing = await session.get(RiskCacheRow, (item_hash, text_hash))
+        if existing is not None:
+            existing.pillars_json = pillars_dict
+            existing.model_versions = model_versions
+            existing.expires_at = expires_at
+        else:
+            session.add(
+                RiskCacheRow(
+                    image_hash=item_hash,
+                    text_hash=text_hash,
+                    pillars_json=pillars_dict,
+                    model_versions=model_versions,
+                    expires_at=expires_at,
+                )
+            )
+        await session.flush()
+        logger.info(
+            "Persisted authentic live AI scores to risk_cache for %s (TTL: %ds, expires_at: %s)",
+            item_hash,
+            ttl_seconds,
+            expires_at.isoformat(),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to persist to risk_cache for %s (%s: %s)",
+            item_hash,
+            type(exc).__name__,
+            exc,
+        )
 
 
 async def _get_or_create_merchant(
@@ -264,17 +343,54 @@ async def create_quote(
     deterministic = _is_deterministic_mode(settings)
     cached: Optional[PillarScores] = None
 
-    if not deterministic:
-        # Live AI neural network evaluation path
+    if deterministic:
+        # Strict deterministic toggle: load from demo cache
+        from app.ai.demo_cache import get_demo_pillars
+
+        demo_p = None
+        if body.merchant_id:
+            demo_p = get_demo_pillars(body.merchant_id)
+        if demo_p is None and body.item_hash:
+            demo_p = get_demo_pillars(body.item_hash)
+        if demo_p is not None:
+            if isinstance(demo_p, PillarScores):
+                cached = demo_p
+            else:
+                data = dict(demo_p)
+                data.pop("cache_status", None)
+                cached = PillarScores(**data, cache_status=CacheStatus.HIT)
+        else:
+            cached = default_pillars()
+    else:
+        # Live AI Inference Pipeline with Dynamic Cache
+        # Step 1: Check risk_cache
         try:
-            image_bytes = load_scenario_image(body.item_hash, body.merchant_id, body.item_title)
-            if image_bytes:
-                logger.info(
-                    "Executing live AI neural network model inference for quote: merchant=%s, hash=%s, title='%s'",
-                    body.merchant_id,
-                    body.item_hash[:12] if body.item_hash else "",
-                    body.item_title,
+            cached = await load_cached_pillars(
+                session, body.item_hash, text_hash, body.merchant_id
+            )
+        except Exception as exc:
+            logger.warning(
+                "risk_cache read failed for %s (%s: %s)",
+                body.item_hash,
+                type(exc).__name__,
+                exc,
+            )
+            cached = None
+
+        # Step 2: On cache miss (or if cache contained default/mock values):
+        if cached is None:
+            logger.info(
+                "Live AI inference running for %s: executing VisualArbiter + SemanticArbiter...",
+                body.item_hash,
+            )
+            start_time = time.perf_counter()
+            try:
+                image_bytes = load_scenario_image(
+                    body.item_hash, body.merchant_id, body.item_title
                 )
+                if not image_bytes:
+                    raise RuntimeError(f"Authentic image asset not found for {body.item_hash}")
+
                 vis_arb = VisualArbiter()
                 sem_arb = SemanticArbiter()
                 desc = _resolve_scenario_description(body.merchant_id, body.item_title)
@@ -282,13 +398,6 @@ async def create_quote(
                 (s_vis, is_ai, vis_reason), (s_sem, sem_reason) = await asyncio.gather(
                     vis_arb.evaluate(image_bytes),
                     sem_arb.evaluate(image_bytes, body.item_title, desc),
-                )
-                logger.info(
-                    "Live model inference completed: s_visual=%s (%s), s_semantic=%s (%s)",
-                    s_vis,
-                    vis_reason,
-                    s_sem,
-                    sem_reason,
                 )
 
                 from app.ai.reviews import score_reviews
@@ -310,6 +419,13 @@ async def create_quote(
                 reason_codes.extend(rev_codes)
                 reason_codes.extend(price_codes)
 
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                logger.info(
+                    "Live AI inference for %s completed in %.2f ms",
+                    body.item_hash,
+                    duration_ms,
+                )
+
                 cached = PillarScores(
                     s_visual=s_vis,
                     s_semantic=s_sem,
@@ -320,28 +436,45 @@ async def create_quote(
                     model_versions={"visual": "heuristic-v1", "semantic": "clip-ViT-B-32"},
                     cache_status=CacheStatus.COMPUTED,
                 )
-                logger.info(
-                    "Dynamic live pillars computed: visual=%s, semantic=%s, reviews=%s, price=%s, reasons=%s",
-                    s_vis,
-                    s_sem,
-                    s_rev,
-                    s_price,
-                    cached.reason_codes,
-                )
-        except Exception as exc:
-            logger.warning(
-                "Live model evaluation failed (%s: %s); falling back to demo cache / default pillars",
-                type(exc).__name__,
-                exc,
-            )
-            cached = None
 
-    if cached is None:
-        try:
-            cached = await load_cached_pillars(session, body.item_hash, text_hash, body.merchant_id)
-        except Exception:  # noqa: BLE001 - DB hiccups degrade, never 500
-            logger.exception("risk_cache read failed; using default pillars")
-            cached = None
+                # Persist authentic calculated scores into risk_cache with valid TTL
+                ttl = getattr(settings, "risk_cache_ttl_seconds", 3600)
+                await save_risk_cache(
+                    session=session,
+                    item_hash=body.item_hash,
+                    text_hash=text_hash,
+                    pillars=cached,
+                    ttl_seconds=ttl,
+                )
+
+            except Exception as exc:
+                # Step 3: Fallback Constraint:
+                # Static fallbacks (demo_cache / default 0.50) should ONLY ever be touched
+                # if the live model evaluation throws an unrecoverable runtime exception.
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                logger.warning(
+                    "Live model evaluation failed for %s after %.2f ms (%s: %s); falling back to demo_cache / default pillars",
+                    body.item_hash,
+                    duration_ms,
+                    type(exc).__name__,
+                    exc,
+                )
+                from app.ai.demo_cache import get_demo_pillars
+
+                demo_p = None
+                if body.merchant_id:
+                    demo_p = get_demo_pillars(body.merchant_id)
+                if demo_p is None and body.item_hash:
+                    demo_p = get_demo_pillars(body.item_hash)
+                if demo_p is not None:
+                    if isinstance(demo_p, PillarScores):
+                        cached = demo_p
+                    else:
+                        data = dict(demo_p)
+                        data.pop("cache_status", None)
+                        cached = PillarScores(**data, cache_status=CacheStatus.HIT)
+                else:
+                    cached = default_pillars()
 
     pillars = cached or default_pillars()
 

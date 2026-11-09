@@ -9,15 +9,19 @@ from app.api.quotes import (
     _is_deterministic_mode,
     create_quote,
     default_pillars,
+    is_mock_or_default_pillars,
     load_cached_pillars,
     load_scenario_image,
     router,
+    save_risk_cache,
 )
 
 __all__ = [
     "router",
     "create_quote",
     "load_cached_pillars",
+    "save_risk_cache",
+    "is_mock_or_default_pillars",
     "load_scenario_image",
     "default_pillars",
     "VisualArbiter",
