@@ -14,7 +14,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /api/v1/health
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -23,9 +23,9 @@ services:
       - key: PAYPAL_API_BASE
         value: https://api-m.sandbox.paypal.com
       - key: ALLOW_NON_SANDBOX
-        value: false
+        value: "false"
       - key: DEMO_DETERMINISTIC_MODE
-        value: true
+        value: "true"
       - key: ALLOWED_ORIGINS
         value: https://shield-storefront.onrender.com
       - key: QUOTES_HMAC_KEY
@@ -41,12 +41,12 @@ services:
 
   - type: web
     name: shield-storefront
-    plan: starter
     runtime: static
-    buildCommand: npm ci --no-audit --no-fund && npm run build
-    staticPublishPath: frontend/dist
-    pullRequestPreviewsEnabled: false
     rootDir: frontend
+    buildCommand: npm ci --no-audit --no-fund && npm run build
+    staticPublishPath: dist
+    previews:
+      generation: off
     routes:
       - type: rewrite
         source: /*
