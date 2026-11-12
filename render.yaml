@@ -13,7 +13,7 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    preDeployCommand: alembic upgrade head
+    preDeployCommand: alembic -c app/db/alembic.ini upgrade head
     healthCheckPath: /api/v1/health
     autoDeployTrigger: commit
     envVars:
