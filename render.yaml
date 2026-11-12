@@ -4,7 +4,7 @@
 databases:
   - name: shield-postgres
     databaseName: shield
-    plan: free
+    plan: basic-256mb
 
 services:
   - type: web
