@@ -131,10 +131,50 @@ def _verify_query_matches(quote: QuoteRow, order: OrderRow) -> None:
         raise QuoteSignatureError("order does not reference its own quote")
     if Decimal(str(quote.item_price)) != Decimal(str(order.item_price)):
         raise QuoteSignatureError("quote item price does not match the order")
-    if Decimal(str(quote.protection_fee)) != Decimal(str(order.protection_fee)):
+    if order.opted_in and Decimal(str(quote.protection_fee)) != Decimal(str(order.protection_fee)):
         raise QuoteSignatureError("quote protection fee does not match the order")
     if quote.currency_code != order.currency_code:
         raise QuoteSignatureError("quote currency does not match the order")
+
+
+DEMO_SCENARIO_ITEMS: dict[str, dict[str, Any]] = {
+    "mer_audio_den": {
+        "item_hash": "b3a9e55dde37b80d97fa8713a01dda91d3c1c7f2e33bd0cf8a35f4f4e3a11c05",
+        "item_price": Decimal("120.00"),
+        "currency_code": "USD",
+        "r_final": Decimal("7.80"),
+    },
+    "mer_dash_deals": {
+        "item_hash": "9d40b7a2c02df11bff6f398ba9dfde04c8f2fba666561e4b7a4d9b4c4f00ad21",
+        "item_price": Decimal("80.00"),
+        "currency_code": "USD",
+        "r_final": Decimal("70.25"),
+    },
+    "mer_refurb_find": {
+        "item_hash": "4c8d2ca1d5d63a1eb9b60a15b4a1f8bff38dcdbf7a8c3d10b8dcfc8d3a417bae",
+        "item_price": Decimal("60.00"),
+        "currency_code": "USD",
+        "r_final": Decimal("81.00"),
+    },
+}
+
+
+def _resolve_unbacked_info(quote_id: str) -> dict[str, Any]:
+    qid = (quote_id or "").lower()
+    if "dash_deals" in qid or "scam" in qid:
+        merchant_id = "mer_dash_deals"
+    elif "audio_den" in qid or "trusted" in qid:
+        merchant_id = "mer_audio_den"
+    else:
+        merchant_id = "mer_refurb_find"
+    item_info = DEMO_SCENARIO_ITEMS[merchant_id]
+    return {
+        "merchant_id": merchant_id,
+        "item_hash": item_info["item_hash"],
+        "item_price": item_info["item_price"],
+        "currency_code": item_info["currency_code"],
+        "r_final": item_info["r_final"],
+    }
 
 
 async def create_order(
@@ -146,7 +186,7 @@ async def create_order(
     buyer_ref: str,
     opt_in: bool,
 ) -> CreateOrderResponse:
-    """Create (or replay) the PayPal order for a signed quote.
+    """Create (or replay) the PayPal order for a signed quote or unbacked purchase.
 
     Idempotent by construction:
     - deterministic internal_order_id PK collapses identical retries;
@@ -154,7 +194,17 @@ async def create_order(
     - consumed-flag flip happens only for opt_in orders, inside the same
       transaction that persists the order row.
     """
-    internal_order_id = internal_order_id_for(quote_id, buyer_ref)
+    effective_quote_id = (quote_id or "").strip()
+    is_unbacked = (
+        not opt_in
+        or not effective_quote_id
+        or effective_quote_id.startswith("unbacked_")
+        or effective_quote_id.startswith("blocked_")
+    )
+    if not effective_quote_id:
+        effective_quote_id = "unbacked_offender"
+
+    internal_order_id = internal_order_id_for(effective_quote_id, buyer_ref)
 
     # ---- replay path ------------------------------------------------------
     existing = await session.get(OrderRow, uuid.UUID(internal_order_id))
@@ -171,20 +221,61 @@ async def create_order(
             currency_code=existing.currency_code,
         )
 
-    # ---- verify the quote from the DB row ---------------------------------
-    quote_row = await _load_quote_row(session, quote_id)
-    if quote_row.consumed:
-        # Only opt-in orders flip the flag, so a consumed quote always means
-        # an order already exists for it (idempotency defense line 1).
-        raise QuoteConsumedError(f"quote {quote_id} already used for an order")
-    try:
-        verify_quote(_quote_from_row(quote_row), settings)
-    except QuoteExpiredError:
-        # Landed QUOTED -> QUOTE_EXPIRED for any order attempt on an expired quote.
-        logger.info("quote %s expired at order creation", quote_id)
-        raise
-    except QuoteError:
-        raise
+    # ---- load quote row (or synthesize unbacked quote if unbacked purchase)
+    quote_row = (
+        await session.execute(select(QuoteRow).where(QuoteRow.quote_id == effective_quote_id))
+    ).scalar_one_or_none()
+
+    if quote_row is None:
+        if is_unbacked:
+            info = _resolve_unbacked_info(effective_quote_id)
+            mer_id = info["merchant_id"]
+            from app.db.models import MerchantReputationRow
+
+            rep = await session.get(MerchantReputationRow, mer_id)
+            if rep is None:
+                session.add(
+                    MerchantReputationRow(
+                        merchant_id=mer_id,
+                        total_orders=0,
+                        successful_orders=0,
+                        verified_fraud_claims=0,
+                    )
+                )
+                await session.flush()
+            from datetime import datetime, timedelta, timezone
+
+            far_future = datetime.now(timezone.utc) + timedelta(days=365)
+            quote_row = QuoteRow(
+                quote_id=effective_quote_id,
+                merchant_id=mer_id,
+                item_hash=info["item_hash"],
+                item_price=info["item_price"],
+                currency_code=info["currency_code"],
+                protection_fee=Decimal("0.00"),
+                r_final=info["r_final"],
+                expires_at=far_future,
+                hmac_signature="unbacked",
+                consumed=False,
+            )
+            session.add(quote_row)
+            await session.flush()
+        else:
+            raise OrderNotFoundError(f"unknown quote {effective_quote_id}")
+
+    if opt_in:
+        if quote_row.consumed:
+            # Only opt-in orders flip the flag, so a consumed quote always means
+            # an order already exists for it (idempotency defense line 1).
+            raise QuoteConsumedError(f"quote {effective_quote_id} already used for an order")
+        try:
+            verify_quote(_quote_from_row(quote_row), settings)
+        except QuoteExpiredError:
+            # Landed QUOTED -> QUOTE_EXPIRED for any order attempt on an expired quote.
+            logger.info("quote %s expired at order creation", effective_quote_id)
+            raise
+        except QuoteError:
+            raise
 
     protection_fee: Optional[Decimal]
     if opt_in:
@@ -203,14 +294,14 @@ async def create_order(
     # ---- PayPal call (deterministic request id) ---------------------------
     response = await create_paypal_order(
         transport,
-        request_id=request_id_for_quote(quote_id),
+        request_id=request_id_for_quote(effective_quote_id),
         payload=payload,
     )
     paypal_order_id = str(response.get("id", ""))
     if not paypal_order_id:
         raise PayPalTransientError(
             "PayPal returned no order id",
-            request_id=request_id_for_quote(quote_id),
+            request_id=request_id_for_quote(effective_quote_id),
             attempts=1,
         )
 
@@ -218,7 +309,7 @@ async def create_order(
     fee = protection_fee if protection_fee is not None else Decimal("0")
     order = OrderRow(
         internal_order_id=uuid.UUID(internal_order_id),
-        quote_id=quote_id,
+        quote_id=effective_quote_id,
         paypal_order_id=paypal_order_id,
         merchant_id=quote_row.merchant_id,
         buyer_ref=buyer_ref,
@@ -232,9 +323,9 @@ async def create_order(
     if opt_in:
         # One-way flip; a racing duplicate simply finds the row untouched->False
         # result, but the unique internal_order_id already collapsed the replay.
-        consumed_flipped = await mark_consumed(session, quote_id)
+        consumed_flipped = await mark_consumed(session, effective_quote_id)
         if not consumed_flipped:  # pragma: no cover - race guard
-            logger.warning("quote %s consumed flag raced at order creation", quote_id)
+            logger.warning("quote %s consumed flag raced at order creation", effective_quote_id)
     await session.flush()
 
     # Stream: transaction add for a NEW order only. The replay path returned
@@ -288,17 +379,18 @@ async def capture_order(
 
     assert_transition(order.state, "CAPTURED")
 
-    # ---- re-verify the quote from the DB row ------------------------------
+    # ---- re-verify the quote from the DB row (only if buyer opted in) -----
     quote_row = await _load_quote_row(session, order.quote_id)
     _verify_query_matches(quote_row, order)
-    try:
-        verify_quote(_quote_from_row(quote_row), settings)
-    except QuoteExpiredError:
-        await _fail(session, order, "CAPTURE_FAILED")
-        raise
-    except QuoteError:
-        await _fail(session, order, "CAPTURE_FAILED")
-        raise
+    if order.opted_in:
+        try:
+            verify_quote(_quote_from_row(quote_row), settings)
+        except QuoteExpiredError:
+            await _fail(session, order, "CAPTURE_FAILED")
+            raise
+        except QuoteError:
+            await _fail(session, order, "CAPTURE_FAILED")
+            raise
 
     # ---- PayPal capture ----------------------------------------------------
     request_id = request_id_for_order(paypal_order_id)

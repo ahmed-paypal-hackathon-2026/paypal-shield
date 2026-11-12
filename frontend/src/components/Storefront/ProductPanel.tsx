@@ -1,6 +1,7 @@
 import { useShield } from "../../state/store";
 import { RiskBadge, ReasonChips } from "../RiskBadge/RiskBadge";
 import { formatMoney } from "../../utils/format";
+import { scenarioById } from "../../data/scenarios";
 
 function PillarRow({ label, value }: { label: string; value: string }) {
   const strong = value.startsWith("0.0");
@@ -32,8 +33,9 @@ export function ProductPanel() {
     );
   }
 
+  const scenarioMeta = scenario ? scenarioById(scenario) : null;
   const currency = quote?.currency_code ?? "USD";
-  const price = quote?.item_price ?? "";
+  const price = quote?.item_price ?? scenarioMeta?.itemPrice ?? "";
 
   return (
     <section className="flex-1 rounded-xl border border-slate-200 bg-white p-6 shadow-card">

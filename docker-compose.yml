@@ -24,12 +24,13 @@ services:
     environment:
       PAYPAL_API_BASE: ${PAYPAL_API_BASE:-https://api-m.sandbox.paypal.com}
       ALLOW_NON_SANDBOX: ${ALLOW_NON_SANDBOX:-false}
-      DEMO_DETERMINISTIC_MODE: ${DEMO_DETERMINISTIC_MODE:-true}
+      DEMO_DETERMINISTIC_MODE: ${DEMO_DETERMINISTIC_MODE:-false}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4173}
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
       PAYPAL_WEBHOOK_ID: ${PAYPAL_WEBHOOK_ID:-}
       QUOTES_HMAC_KEY: ${QUOTES_HMAC_KEY:?Set QUOTES_HMAC_KEY in your .env - run: openssl rand -hex 32}
+      CLAIM_REVIEWER_TOKEN: ${CLAIM_REVIEWER_TOKEN:-shield-reviewer-secret-key}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://shield:shield@postgres:5432/shield}
     ports:
       - "8000:8000"
@@ -49,7 +50,7 @@ services:
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
       VITE_PAYPAL_CLIENT_ID: ${VITE_PAYPAL_CLIENT_ID:-}
-      VITE_ALLOW_MOCK: ${VITE_ALLOW_MOCK:-true}
+      VITE_ALLOW_MOCK: ${VITE_ALLOW_MOCK:-false}
     ports:
       - "5173:5173"
     depends_on:

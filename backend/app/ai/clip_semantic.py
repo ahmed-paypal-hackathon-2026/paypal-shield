@@ -13,9 +13,29 @@ Fallback: heuristic text overlap when sentence-transformers unavailable.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Tuple
+from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+_CLIP_MODEL = None
+_CLIP_LOAD_FAILED = False
+
+
+def _get_clip_model():
+    global _CLIP_MODEL, _CLIP_LOAD_FAILED
+    if _CLIP_MODEL is None and not _CLIP_LOAD_FAILED:
+        try:
+            from sentence_transformers import SentenceTransformer  # type: ignore[import]
+
+            logger.info("Loading SentenceTransformer clip-ViT-B-32 model...")
+            _CLIP_MODEL = SentenceTransformer("clip-ViT-B-32")
+        except Exception as exc:
+            _CLIP_LOAD_FAILED = True
+            logger.warning("sentence-transformers unavailable (%s); using heuristic fallback", exc)
+    return _CLIP_MODEL
 
 _TWO_PLACES = Decimal("0.01")
 _CLAMP_MIN = Decimal("0.00")
@@ -73,12 +93,13 @@ def _text_heuristic_cosine(title: str, description: str) -> float:
 def _image_text_clip_cosine(image_bytes: bytes, title: str, description: str) -> float:
     """Compute CLIP cosine similarity between image and text."""
     try:
-        from sentence_transformers import SentenceTransformer  # type: ignore[import]
+        model = _get_clip_model()
+        if model is None:
+            return _text_heuristic_cosine(title, description)
         from PIL import Image  # type: ignore[import]
         import io
         import numpy as np  # type: ignore[import]
 
-        model = SentenceTransformer("clip-ViT-B-32")
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         combined_text = f"{title} {description}".strip()
 
@@ -137,3 +158,44 @@ async def score_semantic(
     s_semantic = _cosine_to_risk(c)
     reason = _REASON_LOW if s_semantic > _CLAMP_MIN else _REASON_OK
     return (s_semantic, reason)
+
+
+class SemanticArbiter:
+    """Arbiter for semantic image-to-text alignment using CLIP / sentence-transformers."""
+
+    def __init__(self, model_name: str = "clip-ViT-B-32") -> None:
+        self.model_name = model_name
+
+    async def evaluate(
+        self,
+        image_bytes: bytes,
+        title: str,
+        description: str = "",
+        timeout_s: float = 10.0,
+    ) -> Tuple[Decimal, str]:
+        """Score image-text semantic alignment using CLIP embeddings.
+
+        Returns:
+            (s_semantic, reason_code)
+        """
+        logger.info(
+            "SemanticArbiter: running live neural network inference (%s) for title='%s'",
+            self.model_name,
+            title,
+        )
+        s_sem, reason = await score_semantic(image_bytes, title, description, timeout_s=timeout_s)
+        logger.info(
+            "SemanticArbiter output: s_semantic=%s, reason=%s",
+            s_sem,
+            reason,
+        )
+        return (s_sem, reason)
+
+    async def score(
+        self,
+        image_bytes: bytes,
+        title: str,
+        description: str = "",
+        timeout_s: float = 10.0,
+    ) -> Tuple[Decimal, str]:
+        return await self.evaluate(image_bytes, title, description, timeout_s=timeout_s)

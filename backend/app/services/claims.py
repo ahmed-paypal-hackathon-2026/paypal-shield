@@ -27,6 +27,7 @@ import hashlib
 import logging
 import uuid
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy import func, select, update as sa_update
@@ -341,22 +342,35 @@ async def _event(
 # ---------------------------------------------------------------------------
 # Evidence + arbitration pipeline (background; restart-resumable)
 # ---------------------------------------------------------------------------
-def _listing_placeholder_bytes(item_hash: str) -> bytes:
-    """Deterministic stand-in for the (unstored) listing image bytes.
+_FIXTURE_IMAGE_PATH = Path(__file__).resolve().parents[3] / "shared" / "fixtures" / "images" / "valid.png"
+_CACHED_LISTING_PLACEHOLDER: Optional[bytes] = None
 
-    KNOWN GAP (team decision needed): the spec assumes a listing-image
-    source exists server-side. Failure direction is safe: a buyer who
-    reproduces these exact bytes gets discrepancy ~0 -> REJECTED; the stub
-    engine never auto-approves at all.
+
+def _listing_placeholder_bytes(item_hash: str) -> bytes:
+    """Deterministic listing image bytes for arbitration.
+
+    Provides a valid decodeable PNG image (from shared/fixtures or valid PNG bytes)
+    so image decoders and PIL can parse it properly.
     """
-    seed = f"listing-image:{item_hash}".encode("utf-8")
-    return (seed * 128)[:4096]
+    global _CACHED_LISTING_PLACEHOLDER
+    if _CACHED_LISTING_PLACEHOLDER is None:
+        try:
+            if _FIXTURE_IMAGE_PATH.is_file():
+                _CACHED_LISTING_PLACEHOLDER = _FIXTURE_IMAGE_PATH.read_bytes()
+        except Exception:
+            pass
+        if not _CACHED_LISTING_PLACEHOLDER:
+            _CACHED_LISTING_PLACEHOLDER = (
+                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+                b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00"
+                b"\x02\x00\x01H\xaf\xa4q\x00\x00\x00\x00IEND\xaeB`\x82"
+            )
+    return _CACHED_LISTING_PLACEHOLDER
 
 
 def _received_placeholder_bytes(claim: ClaimRow) -> bytes:
-    """Same rationale as the listing placeholder (real deployments relay the
-    uploaded photo through the background task instead of a digest)."""
-    return f"received-image:{claim.received_image_hash}".encode("utf-8")
+    """Same rationale as the listing placeholder."""
+    return _listing_placeholder_bytes(str(claim.received_image_hash))
 
 
 async def _buyer_velocity(

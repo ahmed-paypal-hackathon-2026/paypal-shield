@@ -55,7 +55,7 @@ def plan(scenarios: list[dict]) -> list[dict]:
                 "endpoint": "POST /api/v1/quotes",
                 "request": {
                     "merchant_id": scenario["merchant"]["merchant_id"],
-                    "item_hash": "",
+                    "item_hash": item.get("item_hash", ""),
                     "item_title": item["item_title"],
                     "item_price": item["item_price"],
                     "currency_code": item["currency_code"],

@@ -98,8 +98,8 @@ class QuoteRequest(BaseModel):
 
 
 class CreateOrderRequest(BaseModel):
-    quote_id: str
-    opt_in: bool
+    quote_id: Optional[str] = ""
+    opt_in: bool = False
     buyer_ref: str
 
 

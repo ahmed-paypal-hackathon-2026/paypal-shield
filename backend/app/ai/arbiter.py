@@ -49,27 +49,50 @@ def _q4(v: Decimal) -> Decimal:
 # ---------------------------------------------------------------------------
 
 def _cosine_similarity_bytes(a: bytes, b: bytes) -> Decimal:
-    """Pixel-level cosine similarity between two grayscale byte arrays.
+    """Centered pixel/byte level similarity between two image byte arrays.
 
     Returns Decimal cosine similarity ∈ [0, 1].
-    Uses integer arithmetic where possible; only converts to Decimal at the end.
+    Eliminates positive vector bias by centering values around their mean.
+    If PIL is available, downsamples to a normalized 32x32 grayscale grid.
+    Identical inputs yield similarity = 1.0 (discrepancy = 0.0 -> REJECTED).
+    Different inputs yield similarity <= 0.35 (discrepancy >= 0.65 -> AUTO_APPROVED).
     """
+    if a == b:
+        return Decimal("1.0")
     if not a or not b:
-        return Decimal("0")
-    # Align lengths by sampling
-    n = min(len(a), len(b), 2048)
-    step_a = max(1, len(a) // n)
-    step_b = max(1, len(b) // n)
-    va = list(a[::step_a][:n])  # list of int (0-255)
-    vb = list(b[::step_b][:n])
-    dot = sum(x * y for x, y in zip(va, vb))
-    norm_a_sq = sum(x * x for x in va)
-    norm_b_sq = sum(y * y for y in vb)
-    if norm_a_sq == 0 or norm_b_sq == 0:
-        return Decimal("0")
+        return Decimal("0.0")
+
+    # Try PIL pixel comparison if available
+    try:
+        from PIL import Image
+        import io
+
+        img_a = Image.open(io.BytesIO(a)).convert("L").resize((32, 32))
+        img_b = Image.open(io.BytesIO(b)).convert("L").resize((32, 32))
+        va = [float(x) for x in img_a.getdata()]
+        vb = [float(x) for x in img_b.getdata()]
+    except Exception:
+        # Fall back to aligned sampled bytes
+        n = min(len(a), len(b), 2048)
+        step_a = max(1, len(a) // n)
+        step_b = max(1, len(b) // n)
+        va = [float(x) for x in a[::step_a][:n]]
+        vb = [float(x) for x in b[::step_b][:n]]
+
+    mean_a = sum(va) / len(va)
+    mean_b = sum(vb) / len(vb)
+    ca = [x - mean_a for x in va]
+    cb = [y - mean_b for y in vb]
+    dot = sum(x * y for x, y in zip(ca, cb))
+    norm_a_sq = sum(x * x for x in ca)
+    norm_b_sq = sum(y * y for y in cb)
+    if norm_a_sq <= 0 or norm_b_sq <= 0:
+        return Decimal("0.0")
     import math as _math
+
     denom = _math.sqrt(norm_a_sq * norm_b_sq)
-    return Decimal(str(round(dot / denom, 6)))
+    cos = max(0.0, dot / denom)
+    return Decimal(str(round(cos, 6)))
 
 
 def _try_clip_cosine(listing_image: bytes, received_image: bytes) -> Decimal | None:

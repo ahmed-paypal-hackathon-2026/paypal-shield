@@ -13,3 +13,11 @@ python-multipart>=0.0.9
 # test / tooling
 pytest>=8.0
 pytest-asyncio>=0.23
+
+# ML / AI pipeline & arbiter dependencies
+aiohttp>=3.9
+pillow>=10.2
+numpy>=1.26
+sentence-transformers>=2.5
+torch>=2.2
+

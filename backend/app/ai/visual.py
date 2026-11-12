@@ -12,10 +12,14 @@ Fallback: (0.50, False, VIS_FALLBACK_DEFAULT) on any error/timeout.
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
+import os
 import struct
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Tuple
+from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -222,3 +226,40 @@ async def score_visual(
     is_ai_generated = s_visual >= _AI_THRESHOLD
     reason = _REASON_AI if is_ai_generated else _REASON_CLEAN
     return (s_visual, is_ai_generated, reason)
+
+
+class VisualArbiter:
+    """Arbiter for visual asset integrity and AI-generation detection."""
+
+    def __init__(self, model_path: Optional[str] = None) -> None:
+        self.model_path = model_path or os.environ.get("VISUAL_MODEL_PATH", "")
+
+    async def evaluate(
+        self,
+        image_bytes: bytes,
+        timeout_s: float = 5.0,
+    ) -> Tuple[Decimal, bool, str]:
+        """Score image bytes for AI-generation likelihood using neural / statistical analysis.
+
+        Returns:
+            (s_visual, is_ai_generated, reason_code)
+        """
+        logger.info(
+            "VisualArbiter: evaluating visual asset (%d bytes)",
+            len(image_bytes) if image_bytes else 0,
+        )
+        s_vis, is_ai, reason = await score_visual(image_bytes, timeout_s=timeout_s)
+        logger.info(
+            "VisualArbiter output: s_visual=%s, is_ai_generated=%s, reason=%s",
+            s_vis,
+            is_ai,
+            reason,
+        )
+        return (s_vis, is_ai, reason)
+
+    async def score(
+        self,
+        image_bytes: bytes,
+        timeout_s: float = 5.0,
+    ) -> Tuple[Decimal, bool, str]:
+        return await self.evaluate(image_bytes, timeout_s=timeout_s)
